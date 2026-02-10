@@ -25,6 +25,20 @@ loadout repo                    THE TOOL (public, git-managed)
 ~/.agents/skills/<name>/
 ```
 
+## Configuration location
+
+The config file is resolved in this order:
+
+1. `$LOADOUT_CONFIG` environment variable (if set)
+2. `$XDG_CONFIG_HOME/loadout/loadout.toml` (if `XDG_CONFIG_HOME` is set)
+3. `~/.config/loadout/loadout.toml` (default)
+
+This means you can maintain multiple loadouts and switch between them:
+
+```bash
+LOADOUT_CONFIG=~/work-loadout.toml ./scripts/install.sh
+```
+
 ## Three layers
 
 | Layer | Concern | Location |

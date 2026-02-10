@@ -53,8 +53,17 @@ $EDITOR ~/.config/loadout/loadout.toml
 
 ## Configuration
 
-`~/.config/loadout/loadout.toml` controls everything. Override with
-`$LOADOUT_CONFIG`.
+`~/.config/loadout/loadout.toml` controls everything.
+
+Override the config path with `$LOADOUT_CONFIG` or `$XDG_CONFIG_HOME`:
+
+```bash
+# Use an alternate config
+LOADOUT_CONFIG=~/work-loadout.toml ./scripts/install.sh
+
+# Respects XDG
+XDG_CONFIG_HOME=~/.local/config ./scripts/install.sh
+```
 
 ```toml
 [sources]
@@ -95,6 +104,8 @@ annotated config.
 | `scripts/validate.sh <name>` | Check a single skill by name |
 | `scripts/new.sh <name> [desc]` | Scaffold a new personal skill |
 | `scripts/new.sh --dir <path> <name> [desc]` | Scaffold into a specific directory |
+
+All scripts respect `$LOADOUT_CONFIG` to locate your config file.
 
 ## Compatibility
 
