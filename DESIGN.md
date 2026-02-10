@@ -1,6 +1,7 @@
 # Agent Skills — Design
 
-A skill management system for AI development tools (OpenCode, Claude Code).
+Architecture and rationale for the skill management system.
+For usage instructions, see [README.md](README.md).
 
 ## Architecture
 
