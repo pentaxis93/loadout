@@ -7,7 +7,7 @@ For usage instructions, see [README.md](README.md).
 
 ```
                  ┌─────────────────────┐
-                 │   agent-skills repo  │  source of truth
+                 │     loadout repo     │  source of truth
                  │   skills/            │  organized by category
                  │   skills.toml        │  activation config
                  └─────────┬───────────┘

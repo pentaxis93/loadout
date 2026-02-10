@@ -1,4 +1,4 @@
-# agent-skills
+# loadout
 
 Manage reusable skills for AI development tools. One repo, multiple tools.
 
@@ -24,8 +24,8 @@ skills in one place; both tools find them automatically.
 
 ```bash
 # Clone
-git clone https://github.com/pentaxis93/agent-skills.git
-cd agent-skills
+git clone https://github.com/pentaxis93/loadout.git
+cd loadout
 
 # Create a skill
 ./scripts/new.sh git-commit "Create conventional commits with scope and body"

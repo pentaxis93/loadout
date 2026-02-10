@@ -16,7 +16,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SKILLS_DIR="$REPO_DIR/skills"
 CONFIG="$REPO_DIR/skills.toml"
-MARKER=".managed-by-agent-skills"
+MARKER=".managed-by-loadout"
 DRY_RUN=false
 CLEAN=false
 LIST=false

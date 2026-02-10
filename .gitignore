@@ -10,4 +10,4 @@ Thumbs.db
 .vscode/
 
 # Don't track the managed-by marker files that install.sh creates
-.managed-by-agent-skills
+.managed-by-loadout
