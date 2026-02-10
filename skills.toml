@@ -1,0 +1,50 @@
+# skills.toml — Skill activation configuration
+#
+# This file controls which skills are enabled and where they're delivered.
+# Skills are defined in skills/<name>/SKILL.md. This file selects which
+# ones are active at each scope.
+#
+# Scopes:
+#   global  — symlinked to ~/.claude/skills/ (and other global paths)
+#   project — symlinked to .claude/skills/ in the target project
+#
+# Run ./scripts/install.sh after editing to apply changes.
+
+# ─── Global defaults ────────────────────────────────────────────────────
+# Delivery targets for the global scope. The install script creates
+# symlinks in each of these directories.
+
+[global]
+targets = [
+  "~/.claude/skills",
+  "~/.config/opencode/skills",
+  "~/.agents/skills",
+]
+
+# List skills to enable globally (available in every project).
+# Use the skill directory name, e.g. "my-skill" for skills/my-skill/SKILL.md
+skills = [
+  # "git-commit",
+  # "code-review",
+]
+
+# ─── Project overrides ──────────────────────────────────────────────────
+# Define per-project skill sets. Each key under [projects] is a path
+# (absolute or relative to this repo) to a project root. The install
+# script symlinks listed skills into that project's .claude/skills/.
+#
+# Project skills are additive with global skills unless you set
+# inherit = false.
+
+# [projects."/path/to/my-project"]
+# skills = ["deploy-staging"]
+# inherit = true  # default: true — also include global skills
+
+# ─── Permissions ─────────────────────────────────────────────────────────
+# Optional permission rules matching opencode.json syntax.
+# These are written to the target project's opencode.json if present.
+#
+# [permissions]
+# "*" = "allow"
+# "internal-*" = "deny"
+# "experimental-*" = "ask"

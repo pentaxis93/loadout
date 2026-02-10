@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pentaxis93/agent-skills/schema/skill-frontmatter.json",
+  "title": "SKILL.md Frontmatter",
+  "description": "Validates YAML frontmatter in SKILL.md files. Union of OpenCode and Claude Code fields.",
+  "type": "object",
+  "required": ["name", "description"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Skill identifier. Must match the containing directory name."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "What the skill does and when to use it. Agents use this to decide whether to load the skill."
+    },
+    "disable-model-invocation": {
+      "type": "boolean",
+      "default": false,
+      "description": "Claude Code: if true, only the user can invoke via /name."
+    },
+    "user-invocable": {
+      "type": "boolean",
+      "default": true,
+      "description": "Claude Code: if false, hidden from / menu (model-only)."
+    },
+    "allowed-tools": {
+      "type": "string",
+      "description": "Claude Code: comma-separated tool names permitted without approval."
+    },
+    "context": {
+      "type": "string",
+      "enum": ["fork"],
+      "description": "Claude Code: set to 'fork' to run in an isolated subagent."
+    },
+    "agent": {
+      "type": "string",
+      "description": "Claude Code: subagent type when context is fork (e.g. Explore, Plan)."
+    },
+    "model": {
+      "type": "string",
+      "description": "Claude Code: model override when this skill is active."
+    },
+    "argument-hint": {
+      "type": "string",
+      "description": "Claude Code: hint for autocomplete (e.g. '[issue-number]')."
+    },
+    "license": {
+      "type": "string",
+      "description": "OpenCode: license identifier (e.g. MIT)."
+    },
+    "compatibility": {
+      "type": "string",
+      "description": "OpenCode: tool compatibility hint (e.g. 'opencode')."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "OpenCode: arbitrary string-to-string metadata map."
+    }
+  },
+  "additionalProperties": true
+}
