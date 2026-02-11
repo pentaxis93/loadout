@@ -4,3 +4,4 @@
 //! multiple source directories and linking them into tool discovery paths.
 
 pub mod config;
+pub mod skill;

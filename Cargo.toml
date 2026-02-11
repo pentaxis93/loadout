@@ -19,6 +19,9 @@ serde_yaml = "0.9"
 # Filesystem
 walkdir = "2.5"
 
+# Validation
+regex = "1.11"
+
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"
