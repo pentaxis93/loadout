@@ -1,0 +1,15 @@
+# Test fixture config for integration tests
+
+[sources]
+skills = [
+  "tests/fixtures/skills",
+]
+
+[global]
+targets = [
+  "tests/fixtures/targets/global",
+]
+
+skills = [
+  "test-skill",
+]
