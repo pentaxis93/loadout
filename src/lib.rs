@@ -5,5 +5,7 @@
 
 pub mod commands;
 pub mod config;
+#[cfg(feature = "graph")]
+pub mod graph;
 pub mod linker;
 pub mod skill;

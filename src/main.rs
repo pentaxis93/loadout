@@ -31,6 +31,13 @@ enum Commands {
         #[arg(long)]
         severity: Option<String>,
     },
+    /// Visualize skill dependency graph
+    #[cfg(feature = "graph")]
+    Graph {
+        /// Output format: dot, text, json, mermaid
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
     /// List enabled skills per scope
     List,
     /// Validate SKILL.md files
@@ -79,6 +86,19 @@ fn main() -> Result<()> {
             let findings = commands::check(&config, filter)?;
             commands::print_check_findings(&findings);
             std::process::exit(commands::check_exit_code(&findings));
+        }
+        #[cfg(feature = "graph")]
+        Commands::Graph { format } => {
+            let output_format =
+                commands::graph::OutputFormat::from_str(&format).unwrap_or_else(|| {
+                    eprintln!(
+                        "Invalid format: {}. Valid values: dot, text, json, mermaid",
+                        format
+                    );
+                    std::process::exit(1);
+                });
+
+            commands::graph(&config, output_format)?;
         }
         Commands::List => {
             commands::list(&config)?;
