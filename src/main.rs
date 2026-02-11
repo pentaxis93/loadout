@@ -1,32 +1,35 @@
-fn main() {
-    println!("Hello, world!");
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use loadout::{commands, config};
+
+/// Loadout: Skill lifecycle management for AI agents
+#[derive(Parser, Debug)]
+#[command(name = "loadout")]
+#[command(version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
 }
 
-#[cfg(test)]
-mod tests {
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Install skills by creating symlinks in target directories
+    Install {
+        /// Show what would happen without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
 
-    #[test]
-    fn should_demonstrate_bdd_pattern() {
-        // Given
-        let input = "test input";
-        let expected = "test input";
+fn main() -> Result<()> {
+    let cli = Cli::parse();
 
-        // When
-        let result = input;
-
-        // Then
-        assert_eq!(result, expected);
+    match cli.command {
+        Commands::Install { dry_run } => {
+            let config = config::load()?;
+            commands::install(&config, dry_run)?;
+        }
     }
 
-    #[test]
-    fn should_fail_when_condition_not_met() {
-        // Given
-        let value = 5;
-
-        // When
-        let is_even = value % 2 == 0;
-
-        // Then
-        assert!(!is_even, "5 should not be even");
-    }
+    Ok(())
 }
