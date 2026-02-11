@@ -1,6 +1,6 @@
 # loadout
 
-Skill management for AI development tools. The engine, not the fuel.
+Skill management for AI development tools.
 
 Loadout is the tool that links your skills into the discovery paths
 that [OpenCode](https://opencode.ai) and

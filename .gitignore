@@ -14,3 +14,8 @@ Thumbs.db
 
 # Personal config (lives in ~/.config/loadout/)
 loadout.toml
+
+
+# Added by cargo
+
+/target

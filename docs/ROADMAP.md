@@ -1,26 +1,27 @@
 # Loadout — Roadmap
 
-Development plan for rewriting loadout from bash scripts into a Rust CLI,
+Development plan for evolving loadout from bash scripts into a Rust CLI,
 then extending it from a symlink manager into a skill lifecycle tool.
 
 For current architecture, see [DESIGN.md](../DESIGN.md).
 
 ## Overview
 
-Loadout currently works as three bash scripts (`install.sh`, `validate.sh`,
-`new.sh`) that parse TOML with Python and manage symlinks. The rewrite
-replaces these with a single compiled binary, then adds analysis, a TUI,
-and composition features in later phases.
+Loadout began as three bash scripts (`install.sh`, `validate.sh`, `new.sh`)
+that parse TOML with Python and manage symlinks. The roadmap covers the
+rewrite into a single compiled binary, then adds analysis, a TUI, and
+composition features in later phases.
 
 Each phase produces an independently useful tool. No phase depends on a
 later phase being complete.
 
 | Version | Phase | Summary |
 |---------|-------|---------|
-| 0.1.0 | [Phase 1 — Bash Parity](#phase-1--bash-parity) | Replace scripts with `loadout` binary |
-| 0.2.0 | [Phase 2 — Analysis & Intelligence](#phase-2--analysis--intelligence) | Cross-references, health checks, dependency graphs |
-| 0.3.0 | [Phase 3 — TUI](#phase-3--tui) | Interactive terminal interface |
-| 0.4.0 | [Phase 4 — Composition & Evolution](#phase-4--composition--evolution) | Chains, tags, templates, gap analysis |
+| 0.1.0 | [Phase 1 — Bash Scripts](#phase-1--bash-scripts) | Original bash implementation (complete) |
+| 0.2.0 | [Phase 2 — Rust Parity](#phase-2--rust-parity) | Replace scripts with `loadout` binary |
+| 0.3.0 | [Phase 3 — Analysis & Intelligence](#phase-3--analysis--intelligence) | Cross-references, health checks, dependency graphs |
+| 0.4.0 | [Phase 4 — TUI](#phase-4--tui) | Interactive terminal interface |
+| 0.5.0 | [Phase 5 — Composition & Evolution](#phase-5--composition--evolution) | Chains, tags, templates, gap analysis |
 
 ## Source layout
 
@@ -34,22 +35,22 @@ src/
 │   ├── list.rs          # loadout list
 │   ├── new.rs           # loadout new
 │   ├── validate.rs      # loadout validate
-│   ├── check.rs         # loadout check          (Phase 2)
-│   ├── graph.rs         # loadout graph           (Phase 2)
-│   └── tui.rs           # loadout tui             (Phase 3)
+│   ├── check.rs         # loadout check          (Phase 3)
+│   ├── graph.rs         # loadout graph           (Phase 3)
+│   └── tui.rs           # loadout tui             (Phase 4)
 ├── config/
 │   ├── mod.rs           # Config loading + path resolution
 │   └── types.rs         # Serde structs for loadout.toml
 ├── skill/
 │   ├── mod.rs           # Skill resolution, discovery
 │   ├── frontmatter.rs   # YAML frontmatter parsing + validation
-│   └── crossref.rs      # Cross-reference extraction (Phase 2)
+│   └── crossref.rs      # Cross-reference extraction (Phase 3)
 ├── linker/
 │   ├── mod.rs           # Symlink creation, marker management
 │   └── clean.rs         # Symlink removal
-├── graph/               # Phase 2, behind `graph` feature
+├── graph/               # Phase 3, behind `graph` feature
 │   └── mod.rs           # Dependency graph construction + analysis
-└── tui/                 # Phase 3, behind `tui` feature
+└── tui/                 # Phase 4, behind `tui` feature
     ├── mod.rs           # Ratatui app loop
     ├── skill_browser.rs # Browse/filter skills
     ├── graph_view.rs    # Visual dependency graph
@@ -67,7 +68,33 @@ Design decisions:
 
 ---
 
-## Phase 1 — Bash Parity
+## Phase 1 — Bash Scripts
+
+**Status: Complete (v0.1.0)**
+
+The original implementation using bash scripts with Python TOML parsing.
+Provides core symlink management functionality.
+
+### Scripts
+
+- `install.sh` — Parse config, resolve skills, create symlinks + markers
+- `install.sh --dry-run` — Print what would happen
+- `install.sh --clean` — Remove managed symlinks + markers
+- `install.sh --list` — Show sources, targets, skills, resolution paths
+- `validate.sh [name]` — Validate skill frontmatter
+- `validate.sh /path` — Validate all skills in directory
+- `new.sh <name> [desc]` — Scaffold new skill
+
+### Limitations
+
+- Requires Python for TOML parsing
+- No built-in dependency analysis
+- Limited error handling
+- Three separate scripts instead of unified CLI
+
+---
+
+## Phase 2 — Rust Parity
 
 Replace all three bash scripts with a single Rust binary installed via
 `cargo install --path .`.
@@ -119,18 +146,18 @@ Replace all three bash scripts with a single Rust binary installed via
 
 ### Transition
 
-Bash scripts remain in `scripts/` during Phase 1 for behavioral reference.
+Bash scripts remain in `scripts/` during Phase 2 for behavioral reference.
 Once acceptance criteria pass, move them to `scripts/legacy/` or remove them.
 Update README to show `cargo install --path .` as the install method.
 
 ---
 
-## Phase 2 — Analysis & Intelligence
+## Phase 3 — Analysis & Intelligence
 
 Move beyond install tooling into skill system analysis. This is where loadout
 becomes more than a symlink manager.
 
-### 2a. Cross-reference extraction
+### 3a. Cross-reference extraction
 
 `skill/crossref.rs` — Parse SKILL.md body content (not just frontmatter) to
 extract references to other skills. Detection heuristics:
@@ -143,7 +170,7 @@ extract references to other skills. Detection heuristics:
 
 Builds an in-memory dependency graph of skill relationships.
 
-### 2b. `loadout check`
+### 3b. `loadout check`
 
 A diagnostic command reporting:
 
@@ -160,7 +187,7 @@ A diagnostic command reporting:
 
 Output grouped by severity with actionable messages.
 
-### 2c. `loadout graph`
+### 3c. `loadout graph`
 
 Behind the `graph` feature flag. Uses petgraph to build the skill dependency
 graph with multiple output formats:
@@ -179,7 +206,7 @@ Additional analysis:
 - **Leaf skills** — no outgoing references (pure utilities)
 - **Bridge skills** — removal would disconnect clusters
 
-### 2d. Enhanced `loadout list`
+### 3d. Enhanced `loadout list`
 
 - `loadout list --groups` — skills organized by detected cluster
 - `loadout list --refs <skill>` — incoming and outgoing references
@@ -195,7 +222,7 @@ Additional analysis:
 
 ---
 
-## Phase 3 — TUI
+## Phase 4 — TUI
 
 Interactive terminal interface using ratatui. Behind the `tui` feature flag.
 
@@ -241,11 +268,11 @@ Interactive terminal interface using ratatui. Behind the `tui` feature flag.
 
 ---
 
-## Phase 4 — Composition & Evolution
+## Phase 5 — Composition & Evolution
 
 Features that help the skill system itself evolve.
 
-### 4a. Skill chains
+### 5a. Skill chains
 
 Named sequences for common workflows, defined in config:
 
@@ -259,7 +286,7 @@ design  = ["web-design", "screenshot", "design-loop"]
 all are present and installed. Informational — it documents workflows and
 validates completeness, it does not invoke skills.
 
-### 4b. Skill groups / tags
+### 5b. Skill groups / tags
 
 Optional `tags` field in frontmatter:
 
@@ -271,9 +298,9 @@ tags: [content-pipeline, writing]
 
 - `loadout list --tag <tag>` — filter by tag
 - `loadout list --tags` — show all tags with counts
-- Untagged skills fall back to auto-detected graph clusters from Phase 2
+- Untagged skills fall back to auto-detected graph clusters from Phase 3
 
-### 4c. Skill templates
+### 5c. Skill templates
 
 Extend `loadout new` with `--from <template>`:
 
@@ -282,7 +309,7 @@ Extend `loadout new` with `--from <template>`:
 - `loadout new my-skill --from <existing-skill>` — copy structure from
   another skill
 
-### 4d. Gap analysis
+### 5d. Gap analysis
 
 `loadout gaps` — combines graph analysis with cross-reference data to report:
 
@@ -304,7 +331,7 @@ Extend `loadout new` with `--from <template>`:
 
 These are recorded for future consideration. None block current work.
 
-**Config evolution.** Phase 4 adds `[chains]` and skill-level `tags`. Tags
+**Config evolution.** Phase 5 adds `[chains]` and skill-level `tags`. Tags
 belong in SKILL.md frontmatter (skill metadata, portable). Chains belong in
 `loadout.toml` (user configuration, personal). This split keeps skills
 portable and chains personal.
@@ -316,4 +343,4 @@ module design.
 
 **Remote sources.** Should `[sources].skills` eventually support git URLs
 for team/community skill sharing? Significant scope increase — probably a
-Phase 5 concern if it ever becomes one.
+Phase 6 concern if it ever becomes one.
