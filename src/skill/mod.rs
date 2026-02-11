@@ -1,5 +1,6 @@
 //! Skill discovery, resolution, and frontmatter validation
 
+pub mod crossref;
 pub mod frontmatter;
 
 use std::collections::HashMap;
@@ -9,6 +10,7 @@ use anyhow::Result;
 use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
 
+pub use crossref::{build_reference_map, extract_references, CrossRef, DetectionMethod};
 pub use frontmatter::Frontmatter;
 
 const SKILL_FILE_NAME: &str = "SKILL.md";
