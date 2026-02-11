@@ -19,15 +19,49 @@ enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Remove all managed symlinks from target directories
+    Clean {
+        /// Show what would happen without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// List enabled skills per scope
+    List,
+    /// Validate SKILL.md files
+    Validate {
+        /// Skill name or directory path (validates all if not specified)
+        target: Option<String>,
+    },
+    /// Create a new skill from template
+    New {
+        /// Skill name (lowercase-with-hyphens)
+        name: String,
+        /// Skill description
+        #[arg(short, long)]
+        description: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    let config = config::load()?;
+
     match cli.command {
         Commands::Install { dry_run } => {
-            let config = config::load()?;
             commands::install(&config, dry_run)?;
+        }
+        Commands::Clean { dry_run } => {
+            commands::clean(&config, dry_run)?;
+        }
+        Commands::List => {
+            commands::list(&config)?;
+        }
+        Commands::Validate { target } => {
+            commands::validate(&config, target)?;
+        }
+        Commands::New { name, description } => {
+            commands::new(&config, name, description)?;
         }
     }
 

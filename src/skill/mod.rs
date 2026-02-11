@@ -86,7 +86,7 @@ pub fn discover_all(sources: &[PathBuf]) -> Result<Vec<Skill>> {
 }
 
 /// Discover skills within a single source directory
-fn discover_in_directory(source: &Path) -> Result<Vec<Skill>> {
+pub fn discover_in_directory(source: &Path) -> Result<Vec<Skill>> {
     if !source.exists() {
         // Silently skip non-existent sources
         return Ok(Vec::new());
