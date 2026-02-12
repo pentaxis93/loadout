@@ -2,8 +2,8 @@
 
 #[cfg(feature = "graph")]
 mod graph_view;
-mod installer;
 mod overview;
+mod pipeline;
 mod skill_browser;
 
 use anyhow::Result;
@@ -23,16 +23,19 @@ use ratatui::{
 use std::io;
 use std::time::Duration;
 
+use crate::commands::check::{self, Finding};
 use crate::config::Config;
-use crate::skill::Skill;
+#[cfg(feature = "graph")]
+use crate::graph::SkillGraph;
+use crate::skill::{self, Skill};
 
 /// Which view is currently active
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveView {
     SystemOverview,
     SkillBrowser,
+    PipelineView,
     GraphView,
-    InstallDashboard,
 }
 
 impl ActiveView {
@@ -40,19 +43,19 @@ impl ActiveView {
     fn next(self) -> Self {
         match self {
             ActiveView::SystemOverview => ActiveView::SkillBrowser,
-            ActiveView::SkillBrowser => ActiveView::GraphView,
-            ActiveView::GraphView => ActiveView::InstallDashboard,
-            ActiveView::InstallDashboard => ActiveView::SystemOverview,
+            ActiveView::SkillBrowser => ActiveView::PipelineView,
+            ActiveView::PipelineView => ActiveView::GraphView,
+            ActiveView::GraphView => ActiveView::SystemOverview,
         }
     }
 
     /// Get the previous view in the cycle
     fn prev(self) -> Self {
         match self {
-            ActiveView::SystemOverview => ActiveView::InstallDashboard,
+            ActiveView::SystemOverview => ActiveView::GraphView,
             ActiveView::SkillBrowser => ActiveView::SystemOverview,
-            ActiveView::GraphView => ActiveView::SkillBrowser,
-            ActiveView::InstallDashboard => ActiveView::GraphView,
+            ActiveView::PipelineView => ActiveView::SkillBrowser,
+            ActiveView::GraphView => ActiveView::PipelineView,
         }
     }
 
@@ -60,9 +63,9 @@ impl ActiveView {
     fn name(self) -> &'static str {
         match self {
             ActiveView::SystemOverview => "System Overview",
-            ActiveView::SkillBrowser => "Skill Browser",
-            ActiveView::GraphView => "Graph View",
-            ActiveView::InstallDashboard => "Install Dashboard",
+            ActiveView::SkillBrowser => "Skill Explorer",
+            ActiveView::PipelineView => "Pipeline View",
+            ActiveView::GraphView => "Graph Explorer",
         }
     }
 }
@@ -73,6 +76,11 @@ pub struct App {
     pub config: Config,
     /// Discovered skills
     pub skills: Vec<Skill>,
+    /// Skill dependency graph (if graph feature enabled)
+    #[cfg(feature = "graph")]
+    pub graph: Option<SkillGraph>,
+    /// Health check findings
+    pub findings: Vec<Finding>,
     /// Currently active view
     pub active_view: ActiveView,
     /// Status message to display
@@ -83,8 +91,8 @@ pub struct App {
     pub overview_state: overview::OverviewState,
     /// Skill browser view state
     pub skill_browser_state: skill_browser::SkillBrowserState,
-    /// Install dashboard view state
-    pub installer_state: installer::InstallerState,
+    /// Pipeline view state
+    pub pipeline_state: pipeline::PipelineState,
     /// Graph view state
     #[cfg(feature = "graph")]
     pub graph_view_state: graph_view::GraphViewState,
@@ -93,10 +101,35 @@ pub struct App {
 impl App {
     /// Create a new TUI app with the given config and skills
     pub fn new(config: Config, skills: Vec<Skill>) -> Self {
+        // Build graph if feature enabled
+        #[cfg(feature = "graph")]
+        let graph = {
+            let mut crossrefs = std::collections::HashMap::new();
+            let skill_names: std::collections::HashSet<String> =
+                skills.iter().map(|s| s.name.clone()).collect();
+            for skill in &skills {
+                if let Ok(content) = std::fs::read_to_string(&skill.skill_file) {
+                    let refs = skill::extract_references_with_filter(
+                        &content,
+                        &skill.name,
+                        Some(&skill_names),
+                    );
+                    if !refs.is_empty() {
+                        crossrefs.insert(skill.name.clone(), refs);
+                    }
+                }
+            }
+            Some(SkillGraph::from_skills(&crossrefs, &skills))
+        };
+
+        // Run health checks
+        let findings = check::check(&config, None, false).unwrap_or_default();
+
         let mut overview_state = overview::OverviewState::new();
         overview_state.refresh(&config, &skills);
         let skill_browser_state = skill_browser::SkillBrowserState::new(&skills);
-        let installer_state = installer::InstallerState::new();
+        let mut pipeline_state = pipeline::PipelineState::new();
+        pipeline_state.refresh(&config, &skills);
         #[cfg(feature = "graph")]
         let mut graph_view_state = graph_view::GraphViewState::new();
         #[cfg(feature = "graph")]
@@ -104,12 +137,15 @@ impl App {
         App {
             config,
             skills,
+            #[cfg(feature = "graph")]
+            graph,
+            findings,
             active_view: ActiveView::SystemOverview,
             status_message: "Ready".to_string(),
             should_quit: false,
             overview_state,
             skill_browser_state,
-            installer_state,
+            pipeline_state,
             #[cfg(feature = "graph")]
             graph_view_state,
         }
@@ -219,8 +255,8 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                         }
                         KeyCode::Char('1') => app.set_view(ActiveView::SystemOverview),
                         KeyCode::Char('2') => app.set_view(ActiveView::SkillBrowser),
-                        KeyCode::Char('3') => app.set_view(ActiveView::GraphView),
-                        KeyCode::Char('4') => app.set_view(ActiveView::InstallDashboard),
+                        KeyCode::Char('3') => app.set_view(ActiveView::PipelineView),
+                        KeyCode::Char('4') => app.set_view(ActiveView::GraphView),
                         // View-specific keys
                         KeyCode::Char('j') | KeyCode::Down
                             if app.active_view == ActiveView::SkillBrowser =>
@@ -236,28 +272,46 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                             app.skill_browser_state.search_active = true;
                             app.status_message = "Search mode (Esc to exit)".to_string();
                         }
+                        KeyCode::Enter if app.active_view == ActiveView::SkillBrowser => {
+                            app.skill_browser_state.toggle_mode();
+                            let mode_name = match app.skill_browser_state.mode {
+                                skill_browser::ExplorerMode::List => "List mode",
+                                skill_browser::ExplorerMode::Profile => "Profile mode",
+                            };
+                            app.status_message = format!("Switched to {}", mode_name);
+                        }
                         KeyCode::Esc if app.active_view == ActiveView::SkillBrowser => {
-                            app.skill_browser_state
-                                .update_filter(String::new(), &app.skills);
-                            app.status_message = "Filter cleared".to_string();
+                            // If in profile mode, return to list mode
+                            // Otherwise, clear filter
+                            if app.skill_browser_state.mode == skill_browser::ExplorerMode::Profile
+                            {
+                                app.skill_browser_state.mode = skill_browser::ExplorerMode::List;
+                                app.status_message = "Returned to list mode".to_string();
+                            } else {
+                                app.skill_browser_state
+                                    .update_filter(String::new(), &app.skills);
+                                app.status_message = "Filter cleared".to_string();
+                            }
                         }
                         // System overview refresh
                         KeyCode::Char('r') if app.active_view == ActiveView::SystemOverview => {
                             app.overview_state.refresh(&app.config, &app.skills);
                             app.status_message = "Overview refreshed".to_string();
                         }
-                        // Install dashboard operations
-                        KeyCode::Char('i') if app.active_view == ActiveView::InstallDashboard => {
-                            match app.installer_state.install(&app.config, &app.skills) {
-                                Ok(msg) => app.status_message = msg,
-                                Err(e) => app.status_message = format!("Install failed: {}", e),
-                            }
+                        // Pipeline view navigation
+                        KeyCode::Char('j') | KeyCode::Down
+                            if app.active_view == ActiveView::PipelineView =>
+                        {
+                            app.pipeline_state.next();
                         }
-                        KeyCode::Char('c') if app.active_view == ActiveView::InstallDashboard => {
-                            match app.installer_state.clean(&app.config) {
-                                Ok(msg) => app.status_message = msg,
-                                Err(e) => app.status_message = format!("Clean failed: {}", e),
-                            }
+                        KeyCode::Char('k') | KeyCode::Up
+                            if app.active_view == ActiveView::PipelineView =>
+                        {
+                            app.pipeline_state.previous();
+                        }
+                        KeyCode::Char('r') if app.active_view == ActiveView::PipelineView => {
+                            app.pipeline_state.refresh(&app.config, &app.skills);
+                            app.status_message = "Pipelines refreshed".to_string();
                         }
                         // Graph view navigation
                         #[cfg(feature = "graph")]
@@ -276,6 +330,30 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                         KeyCode::Char('r') if app.active_view == ActiveView::GraphView => {
                             app.graph_view_state.refresh(&app.config, &app.skills);
                             app.status_message = "Graph refreshed".to_string();
+                        }
+                        #[cfg(feature = "graph")]
+                        KeyCode::Enter if app.active_view == ActiveView::GraphView => {
+                            if app.graph_view_state.mode == graph_view::NavigationMode::Browse {
+                                app.graph_view_state.toggle_mode();
+                                app.status_message =
+                                    "Focus mode - follow edges with Enter".to_string();
+                            } else {
+                                app.graph_view_state.follow_edge();
+                                app.status_message = "Following edge...".to_string();
+                            }
+                        }
+                        #[cfg(feature = "graph")]
+                        KeyCode::Backspace if app.active_view == ActiveView::GraphView => {
+                            app.graph_view_state.navigate_back();
+                            app.status_message = "Navigated back".to_string();
+                        }
+                        #[cfg(feature = "graph")]
+                        KeyCode::Esc if app.active_view == ActiveView::GraphView => {
+                            if app.graph_view_state.mode == graph_view::NavigationMode::Focus {
+                                app.graph_view_state.mode = graph_view::NavigationMode::Browse;
+                                app.graph_view_state.trail.clear();
+                                app.status_message = "Returned to browse mode".to_string();
+                            }
                         }
                         _ => {}
                     }
@@ -307,11 +385,22 @@ fn ui(f: &mut Frame, app: &mut App) {
                 chunks[0],
                 &app.config,
                 &app.skills,
+                #[cfg(feature = "graph")]
+                app.graph.as_ref(),
+                #[cfg(not(feature = "graph"))]
+                None,
+                &app.findings,
                 &mut app.skill_browser_state,
             );
         }
-        ActiveView::InstallDashboard => {
-            installer::render(f, chunks[0], &app.config, &app.skills, &app.installer_state);
+        ActiveView::PipelineView => {
+            pipeline::render(
+                f,
+                chunks[0],
+                &app.config,
+                &app.skills,
+                &mut app.pipeline_state,
+            );
         }
         #[cfg(feature = "graph")]
         ActiveView::GraphView => {
@@ -417,13 +506,13 @@ skills = []
         app.prev_view();
 
         // Then (should wrap around)
-        assert_eq!(app.active_view, ActiveView::InstallDashboard);
+        assert_eq!(app.active_view, ActiveView::GraphView);
 
         // When
         app.prev_view();
 
         // Then
-        assert_eq!(app.active_view, ActiveView::GraphView);
+        assert_eq!(app.active_view, ActiveView::PipelineView);
     }
 
     #[test]
@@ -459,6 +548,6 @@ skills = []
         app.next_view();
 
         // Then
-        assert!(app.status_message.contains("Graph View"));
+        assert!(app.status_message.contains("Skill Explorer"));
     }
 }

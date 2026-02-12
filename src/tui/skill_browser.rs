@@ -1,4 +1,4 @@
-//! Skill browser view - list + detail pane
+//! Skill explorer view - relationship profile and navigation
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -8,11 +8,24 @@ use ratatui::{
     Frame,
 };
 
+use crate::commands::check::Finding;
 use crate::config::Config;
+use crate::graph::{EdgeKind, SkillGraph};
 use crate::skill::Skill;
 
-/// State for the skill browser view
+/// Display mode for the skill explorer
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExplorerMode {
+    /// List mode - scrollable skill list with basic info
+    List,
+    /// Profile mode - detailed relationship view for selected skill
+    Profile,
+}
+
+/// State for the skill explorer view
 pub struct SkillBrowserState {
+    /// Current display mode
+    pub mode: ExplorerMode,
     /// List selection state
     pub list_state: ListState,
     /// Current search filter
@@ -27,6 +40,7 @@ impl SkillBrowserState {
     /// Create a new skill browser state
     pub fn new(skills: &[Skill]) -> Self {
         let mut state = SkillBrowserState {
+            mode: ExplorerMode::List,
             list_state: ListState::default(),
             filter: String::new(),
             search_active: false,
@@ -36,6 +50,14 @@ impl SkillBrowserState {
             state.list_state.select(Some(0));
         }
         state
+    }
+
+    /// Toggle between list and profile modes
+    pub fn toggle_mode(&mut self) {
+        self.mode = match self.mode {
+            ExplorerMode::List => ExplorerMode::Profile,
+            ExplorerMode::Profile => ExplorerMode::List,
+        };
     }
 
     /// Update the filter and recompute filtered indices
@@ -145,8 +167,26 @@ impl SkillBrowserState {
     }
 }
 
-/// Render the skill browser view
+/// Render the skill explorer view
 pub fn render(
+    f: &mut Frame,
+    area: Rect,
+    config: &Config,
+    skills: &[Skill],
+    graph: Option<&SkillGraph>,
+    findings: &[Finding],
+    state: &mut SkillBrowserState,
+) {
+    match state.mode {
+        ExplorerMode::List => render_list_mode(f, area, config, skills, state),
+        ExplorerMode::Profile => {
+            render_profile_mode(f, area, config, skills, graph, findings, state)
+        }
+    }
+}
+
+/// Render list mode - skill list + basic detail
+fn render_list_mode(
     f: &mut Frame,
     area: Rect,
     config: &Config,
@@ -160,6 +200,25 @@ pub fn render(
 
     render_skill_list(f, chunks[0], config, skills, state);
     render_detail_pane(f, chunks[1], skills, state);
+}
+
+/// Render profile mode - relationship profile for selected skill
+fn render_profile_mode(
+    f: &mut Frame,
+    area: Rect,
+    config: &Config,
+    skills: &[Skill],
+    graph: Option<&SkillGraph>,
+    findings: &[Finding],
+    state: &mut SkillBrowserState,
+) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .split(area);
+
+    render_skill_list(f, chunks[0], config, skills, state);
+    render_relationship_profile(f, chunks[1], skills, graph, findings, state);
 }
 
 /// Render the skill list (left pane)
@@ -221,7 +280,7 @@ fn render_skill_list(
     f.render_stateful_widget(list, area, &mut state.list_state);
 }
 
-/// Render the detail pane (right pane)
+/// Render the detail pane (right pane) - used in list mode
 fn render_detail_pane(f: &mut Frame, area: Rect, skills: &[Skill], state: &SkillBrowserState) {
     let content = if let Some(skill) = state.selected_skill(skills) {
         format_skill_detail(skill)
@@ -234,9 +293,36 @@ fn render_detail_pane(f: &mut Frame, area: Rect, skills: &[Skill], state: &Skill
     let paragraph = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" Detail ")
+                .title(" Detail (press Enter for relationship profile) ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: false });
+
+    f.render_widget(paragraph, area);
+}
+
+/// Render the relationship profile pane (right pane) - used in profile mode
+fn render_relationship_profile(
+    f: &mut Frame,
+    area: Rect,
+    skills: &[Skill],
+    graph: Option<&SkillGraph>,
+    findings: &[Finding],
+    state: &SkillBrowserState,
+) {
+    let content = if let Some(skill) = state.selected_skill(skills) {
+        format_relationship_profile(skill, graph, findings)
+    } else {
+        "No skill selected.\n\nPress Esc to return to list mode.".to_string()
+    };
+
+    let paragraph = Paragraph::new(content)
+        .block(
+            Block::default()
+                .title(" Relationship Profile (press Esc to return) ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green)),
         )
         .wrap(Wrap { trim: false });
 
@@ -339,6 +425,159 @@ fn format_skill_detail(skill: &Skill) -> String {
     if let Some(val) = &skill.frontmatter.model {
         lines.push(format!("Model: {}", val));
     }
+
+    lines.join("\n")
+}
+
+/// Format relationship profile for a skill
+fn format_relationship_profile(
+    skill: &Skill,
+    graph: Option<&SkillGraph>,
+    findings: &[Finding],
+) -> String {
+    let mut lines = Vec::new();
+
+    // Header
+    lines.push(format!("═══ {} ═══", skill.name.to_uppercase()));
+    lines.push(String::new());
+    lines.push(skill.frontmatter.description.clone());
+    lines.push(String::new());
+
+    // Graph relationships
+    if let Some(g) = graph {
+        // Skills this one references (outgoing edges)
+        if let Some(outgoing) = g.edges_from(&skill.name) {
+            if !outgoing.is_empty() {
+                lines.push("▸ DEPENDS ON:".to_string());
+                for (target, kind) in &outgoing {
+                    let icon = match kind {
+                        EdgeKind::CrossRef => "→",
+                        EdgeKind::Pipeline => "⇢",
+                    };
+                    lines.push(format!("  {} {}", icon, target));
+                }
+                lines.push(String::new());
+            }
+        }
+
+        // Skills that reference this one (incoming edges)
+        if let Some(incoming) = g.edges_to(&skill.name) {
+            if !incoming.is_empty() {
+                lines.push("▸ REFERENCED BY:".to_string());
+                for (source, kind) in &incoming {
+                    let icon = match kind {
+                        EdgeKind::CrossRef => "←",
+                        EdgeKind::Pipeline => "⇠",
+                    };
+                    lines.push(format!("  {} {}", icon, source));
+                }
+                lines.push(String::new());
+            }
+        }
+
+        // Cluster membership
+        let mut cluster_members = Vec::new();
+        for cluster in &g.clusters {
+            if cluster.contains(&skill.name) {
+                cluster_members = cluster
+                    .iter()
+                    .filter(|s| *s != &skill.name)
+                    .cloned()
+                    .collect();
+                break;
+            }
+        }
+        if !cluster_members.is_empty() {
+            lines.push("▸ CLUSTER MEMBERSHIP:".to_string());
+            lines.push(format!(
+                "  Part of {}-skill cluster with:",
+                cluster_members.len() + 1
+            ));
+            for member in &cluster_members {
+                lines.push(format!("  • {}", member));
+            }
+            lines.push(String::new());
+        }
+
+        // Graph properties
+        let mut props = Vec::new();
+        if g.roots.contains(&skill.name) {
+            props.push("Root (no incoming dependencies)");
+        }
+        if g.leaves.contains(&skill.name) {
+            props.push("Leaf (no outgoing dependencies)");
+        }
+        if g.bridges.contains(&skill.name) {
+            props.push("Bridge (critical connection point)");
+        }
+        if !props.is_empty() {
+            lines.push("▸ GRAPH PROPERTIES:".to_string());
+            for prop in props {
+                lines.push(format!("  • {}", prop));
+            }
+            lines.push(String::new());
+        }
+    }
+
+    // Pipeline membership
+    if let Some(pipeline) = &skill.frontmatter.pipeline {
+        lines.push("▸ PIPELINE MEMBERSHIP:".to_string());
+        for (name, stage) in pipeline {
+            let mut deps = Vec::new();
+            if let Some(after) = &stage.after {
+                deps.push(format!("after: {}", after.join(", ")));
+            }
+            if let Some(before) = &stage.before {
+                deps.push(format!("before: {}", before.join(", ")));
+            }
+            let dep_str = if deps.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", deps.join("; "))
+            };
+            lines.push(format!(
+                "  • {}: stage={}, order={}{}",
+                name, stage.stage, stage.order, dep_str
+            ));
+        }
+        lines.push(String::new());
+    }
+
+    // Health findings for this skill
+    let skill_findings: Vec<&Finding> = findings
+        .iter()
+        .filter(|f| {
+            f.path
+                .as_ref()
+                .map(|p| p.to_string_lossy().contains(&skill.name))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if !skill_findings.is_empty() {
+        lines.push("▸ HEALTH FINDINGS:".to_string());
+        for finding in skill_findings {
+            let severity_label = match finding.severity {
+                crate::commands::check::Severity::Error => "[ERROR]",
+                crate::commands::check::Severity::Warning => "[WARN]",
+                crate::commands::check::Severity::Info => "[INFO]",
+            };
+            lines.push(format!("  {} {}", severity_label, finding.message));
+            lines.push(format!("    Fix: {}", finding.fix));
+        }
+        lines.push(String::new());
+    }
+
+    // Tags
+    if let Some(tags) = &skill.frontmatter.tags {
+        lines.push("▸ TAGS:".to_string());
+        lines.push(format!("  {}", tags.join(", ")));
+        lines.push(String::new());
+    }
+
+    // Path
+    lines.push("▸ LOCATION:".to_string());
+    lines.push(format!("  {}", skill.path.display()));
 
     lines.join("\n")
 }
