@@ -1,5 +1,7 @@
 //! Interactive TUI for skill management (requires `tui` feature)
 
+mod skill_browser;
+
 use anyhow::Result;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
@@ -73,17 +75,21 @@ pub struct App {
     pub status_message: String,
     /// Whether the app should quit
     pub should_quit: bool,
+    /// Skill browser view state
+    pub skill_browser_state: skill_browser::SkillBrowserState,
 }
 
 impl App {
     /// Create a new TUI app with the given config and skills
     pub fn new(config: Config, skills: Vec<Skill>) -> Self {
+        let skill_browser_state = skill_browser::SkillBrowserState::new(&skills);
         App {
             config,
             skills,
             active_view: ActiveView::SkillBrowser,
             status_message: "Ready".to_string(),
             should_quit: false,
+            skill_browser_state,
         }
     }
 
@@ -156,22 +162,65 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
         // Handle events with a timeout
         if event::poll(tick_rate)? {
             if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') => app.quit(),
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        app.quit()
+                // Handle search mode for skill browser
+                if app.skill_browser_state.search_active {
+                    match key.code {
+                        KeyCode::Char(c) => {
+                            let mut filter = app.skill_browser_state.filter.clone();
+                            filter.push(c);
+                            app.skill_browser_state.update_filter(filter, &app.skills);
+                        }
+                        KeyCode::Backspace => {
+                            let mut filter = app.skill_browser_state.filter.clone();
+                            filter.pop();
+                            app.skill_browser_state.update_filter(filter, &app.skills);
+                        }
+                        KeyCode::Enter | KeyCode::Esc => {
+                            app.skill_browser_state.search_active = false;
+                            app.status_message = "Search mode deactivated".to_string();
+                        }
+                        _ => {}
                     }
-                    KeyCode::Tab => app.next_view(),
-                    KeyCode::BackTab => app.prev_view(),
-                    KeyCode::Char('?') => {
-                        app.status_message =
-                            "q: quit | Tab: next view | Shift+Tab: prev view | ?: help".to_string()
+                } else {
+                    // Normal navigation mode
+                    match key.code {
+                        KeyCode::Char('q') => app.quit(),
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.quit()
+                        }
+                        KeyCode::Tab => app.next_view(),
+                        KeyCode::BackTab => app.prev_view(),
+                        KeyCode::Char('?') => {
+                            app.status_message =
+                                "q: quit | Tab: next view | Shift+Tab: prev view | ?: help"
+                                    .to_string()
+                        }
+                        KeyCode::Char('1') => app.set_view(ActiveView::SkillBrowser),
+                        KeyCode::Char('2') => app.set_view(ActiveView::GraphView),
+                        KeyCode::Char('3') => app.set_view(ActiveView::InstallDashboard),
+                        KeyCode::Char('4') => app.set_view(ActiveView::HealthPanel),
+                        // View-specific keys
+                        KeyCode::Char('j') | KeyCode::Down
+                            if app.active_view == ActiveView::SkillBrowser =>
+                        {
+                            app.skill_browser_state.next();
+                        }
+                        KeyCode::Char('k') | KeyCode::Up
+                            if app.active_view == ActiveView::SkillBrowser =>
+                        {
+                            app.skill_browser_state.previous();
+                        }
+                        KeyCode::Char('/') if app.active_view == ActiveView::SkillBrowser => {
+                            app.skill_browser_state.search_active = true;
+                            app.status_message = "Search mode (Esc to exit)".to_string();
+                        }
+                        KeyCode::Esc if app.active_view == ActiveView::SkillBrowser => {
+                            app.skill_browser_state
+                                .update_filter(String::new(), &app.skills);
+                            app.status_message = "Filter cleared".to_string();
+                        }
+                        _ => {}
                     }
-                    KeyCode::Char('1') => app.set_view(ActiveView::SkillBrowser),
-                    KeyCode::Char('2') => app.set_view(ActiveView::GraphView),
-                    KeyCode::Char('3') => app.set_view(ActiveView::InstallDashboard),
-                    KeyCode::Char('4') => app.set_view(ActiveView::HealthPanel),
-                    _ => {}
                 }
             }
         }
@@ -183,20 +232,34 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
 }
 
 /// Draw the UI
-fn ui(f: &mut Frame, app: &App) {
+fn ui(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(f.area());
 
-    // Main view area
-    let view_content = render_view(app);
-    let view_block = Block::default()
-        .title(format!(" {} ", app.active_view.name()))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
-    let view_widget = Paragraph::new(view_content).block(view_block);
-    f.render_widget(view_widget, chunks[0]);
+    // Main view area - dispatch to appropriate view renderer
+    match app.active_view {
+        ActiveView::SkillBrowser => {
+            skill_browser::render(
+                f,
+                chunks[0],
+                &app.config,
+                &app.skills,
+                &mut app.skill_browser_state,
+            );
+        }
+        _ => {
+            // Placeholder for other views
+            let view_content = render_view_placeholder(app);
+            let view_block = Block::default()
+                .title(format!(" {} ", app.active_view.name()))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let view_widget = Paragraph::new(view_content).block(view_block);
+            f.render_widget(view_widget, chunks[0]);
+        }
+    }
 
     // Status bar
     let status_spans = vec![
@@ -224,23 +287,14 @@ fn ui(f: &mut Frame, app: &App) {
     f.render_widget(status_bar, chunks[1]);
 }
 
-/// Render the current view's content
-fn render_view(app: &App) -> String {
+/// Render placeholder content for views that aren't implemented yet
+fn render_view_placeholder(app: &App) -> String {
     let skill_count = app.skills.len();
-    let config_sources = app.config.sources.skills.len();
 
     match app.active_view {
         ActiveView::SkillBrowser => {
-            format!(
-                "Skill Browser (coming soon)\n\n\
-                 {} skills discovered from {} source(s)\n\n\
-                 This view will show:\n\
-                 - Filterable list of all skills with status indicators\n\
-                 - Preview pane with description + frontmatter\n\
-                 - Search/filter by name, description, tag, pipeline\n\
-                 - Toggle skills on/off per scope",
-                skill_count, config_sources
-            )
+            // Should never reach here - skill browser is implemented
+            "Error: skill browser should be rendered by skill_browser::render".to_string()
         }
         ActiveView::GraphView => {
             format!(
