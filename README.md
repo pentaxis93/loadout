@@ -34,9 +34,6 @@ git clone https://github.com/pentaxis93/loadout.git
 cd loadout
 cargo install --path .
 
-# Optional: install with graph support
-cargo install --path . --features graph
-
 # Set up your config
 mkdir -p ~/.config/loadout/skills
 cp loadout.example.toml ~/.config/loadout/loadout.toml
@@ -106,12 +103,12 @@ annotated config.
 | `loadout clean --dry-run` | Preview what would be cleaned |
 | `loadout check` | Check skill system health and report diagnostics |
 | `loadout check --severity <level>` | Filter diagnostics by severity (error, warning, info) |
-| `loadout graph --format dot` | Visualize dependency graph as Graphviz DOT (requires `graph` feature) |
-| `loadout graph --format text` | Show dependency graph as text adjacency list (requires `graph` feature) |
-| `loadout graph --format json` | Export dependency graph as JSON (requires `graph` feature) |
-| `loadout graph --format mermaid` | Render dependency graph as Mermaid diagram (requires `graph` feature) |
+| `loadout graph --format dot` | Visualize dependency graph as Graphviz DOT |
+| `loadout graph --format text` | Show dependency graph as text adjacency list |
+| `loadout graph --format json` | Export dependency graph as JSON |
+| `loadout graph --format mermaid` | Render dependency graph as Mermaid diagram |
 | `loadout list` | Show enabled skills per scope with paths |
-| `loadout list --groups` | Organize skills by detected cluster (requires `graph` feature for clusters) |
+| `loadout list --groups` | Organize skills by detected cluster |
 | `loadout list --refs <skill>` | Show incoming and outgoing references for a skill |
 | `loadout list --missing` | Show only missing skills (dangling references) |
 | `loadout validate` | Check all skills across all sources |

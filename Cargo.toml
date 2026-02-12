@@ -38,7 +38,7 @@ serde_json = { version = "1.0", optional = true }
 tempfile = "3.13"
 
 [features]
-default = []
+default = ["graph"]
 tui = ["ratatui", "crossterm"]
 graph = ["petgraph", "serde_json"]
 
