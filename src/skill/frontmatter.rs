@@ -41,6 +41,33 @@ pub enum FrontmatterError {
 
     #[error("Invalid tag format '{0}': must match pattern {NAME_PATTERN}")]
     InvalidTagFormat(String),
+
+    #[error("Invalid pipeline name '{0}': must match pattern {NAME_PATTERN}")]
+    InvalidPipelineName(String),
+
+    #[error("Pipeline '{pipeline}' has invalid stage name '{stage}': must be non-empty")]
+    InvalidStageName { pipeline: String, stage: String },
+
+    #[error("Pipeline '{pipeline}' has order 0: order must be >= 1")]
+    InvalidPipelineOrder { pipeline: String },
+}
+
+/// A skill's role within a named pipeline/workflow
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineStage {
+    /// Human label for this skill's role in the pipeline
+    pub stage: String,
+
+    /// Numeric position in the pipeline (1-based). Same order = parallel alternatives
+    pub order: u32,
+
+    /// Skills that should run before this one
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after: Option<Vec<String>>,
+
+    /// Skills that should run after this one
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before: Option<Vec<String>>,
 }
 
 /// SKILL.md frontmatter
@@ -95,6 +122,10 @@ pub struct Frontmatter {
     /// Flat classification tags for grouping skills by function/domain
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+
+    /// Pipeline/workflow participation with stage ordering
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipeline: Option<HashMap<String, PipelineStage>>,
 }
 
 impl Frontmatter {
@@ -123,6 +154,7 @@ impl Frontmatter {
         self.validate_name()?;
         self.validate_description()?;
         self.validate_tags()?;
+        self.validate_pipeline()?;
         Ok(())
     }
 
@@ -148,6 +180,35 @@ impl Frontmatter {
             for tag in tags {
                 if !re.is_match(tag) {
                     return Err(FrontmatterError::InvalidTagFormat(tag.clone()).into());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate pipeline if present
+    fn validate_pipeline(&self) -> Result<()> {
+        if let Some(pipeline) = &self.pipeline {
+            let re = Regex::new(NAME_PATTERN).unwrap();
+            for (name, stage) in pipeline {
+                // Validate pipeline name
+                if !re.is_match(name) {
+                    return Err(FrontmatterError::InvalidPipelineName(name.clone()).into());
+                }
+                // Validate stage name is non-empty
+                if stage.stage.trim().is_empty() {
+                    return Err(FrontmatterError::InvalidStageName {
+                        pipeline: name.clone(),
+                        stage: stage.stage.clone(),
+                    }
+                    .into());
+                }
+                // Validate order is >= 1
+                if stage.order == 0 {
+                    return Err(FrontmatterError::InvalidPipelineOrder {
+                        pipeline: name.clone(),
+                    }
+                    .into());
                 }
             }
         }
@@ -516,5 +577,104 @@ tags: [valid-tag, Invalid_Tag]
         let err = result.unwrap_err();
         assert!(err.to_string().contains("Invalid tag format"));
         assert!(err.to_string().contains("Invalid_Tag"));
+    }
+
+    #[test]
+    fn should_parse_single_pipeline() {
+        // Given
+        let content = "---\nname: my-skill\ndescription: A test skill\npipeline:\n  blog-production:\n    stage: compile\n    order: 3\n    after: [story-spine, seed-craft]\n    before: [blog-edit]\n---";
+
+        // When
+        let frontmatter = Frontmatter::parse(content).unwrap();
+
+        // Then
+        let pipeline = frontmatter.pipeline.unwrap();
+        assert_eq!(pipeline.len(), 1);
+        let stage = &pipeline["blog-production"];
+        assert_eq!(stage.stage, "compile");
+        assert_eq!(stage.order, 3);
+        assert_eq!(
+            stage.after.as_ref().unwrap(),
+            &vec!["story-spine".to_string(), "seed-craft".to_string()]
+        );
+        assert_eq!(
+            stage.before.as_ref().unwrap(),
+            &vec!["blog-edit".to_string()]
+        );
+    }
+
+    #[test]
+    fn should_parse_multi_pipeline_membership() {
+        // Given
+        let content = "---\nname: my-skill\ndescription: A test skill\npipeline:\n  blog-production:\n    stage: capture\n    order: 2\n  insight-capture:\n    stage: record\n    order: 1\n---";
+
+        // When
+        let frontmatter = Frontmatter::parse(content).unwrap();
+
+        // Then
+        let pipeline = frontmatter.pipeline.unwrap();
+        assert_eq!(pipeline.len(), 2);
+        assert_eq!(pipeline["blog-production"].stage, "capture");
+        assert_eq!(pipeline["blog-production"].order, 2);
+        assert_eq!(pipeline["insight-capture"].stage, "record");
+        assert_eq!(pipeline["insight-capture"].order, 1);
+    }
+
+    #[test]
+    fn should_parse_pipeline_without_after_before() {
+        // Given
+        let content = "---\nname: my-skill\ndescription: A test skill\npipeline:\n  blog-production:\n    stage: foundation\n    order: 1\n---";
+
+        // When
+        let frontmatter = Frontmatter::parse(content).unwrap();
+
+        // Then
+        let pipeline = frontmatter.pipeline.unwrap();
+        let stage = &pipeline["blog-production"];
+        assert!(stage.after.is_none());
+        assert!(stage.before.is_none());
+    }
+
+    #[test]
+    fn should_parse_missing_pipeline_as_none() {
+        // Given
+        let content = r#"---
+name: my-skill
+description: A test skill
+---"#;
+
+        // When
+        let frontmatter = Frontmatter::parse(content).unwrap();
+
+        // Then
+        assert!(frontmatter.pipeline.is_none());
+    }
+
+    #[test]
+    fn should_reject_invalid_pipeline_name() {
+        // Given
+        let content = "---\nname: my-skill\ndescription: A test skill\npipeline:\n  Invalid_Name:\n    stage: compile\n    order: 1\n---";
+
+        // When
+        let result = Frontmatter::parse(content);
+
+        // Then
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Invalid pipeline name"));
+    }
+
+    #[test]
+    fn should_reject_pipeline_with_zero_order() {
+        // Given
+        let content = "---\nname: my-skill\ndescription: A test skill\npipeline:\n  blog-production:\n    stage: compile\n    order: 0\n---";
+
+        // When
+        let result = Frontmatter::parse(content);
+
+        // Then
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("order must be >= 1"));
     }
 }

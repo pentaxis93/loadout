@@ -70,6 +70,38 @@
         "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
       },
       "description": "Loadout: flat classification tags for grouping skills by function/domain."
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["stage", "order"],
+        "properties": {
+          "stage": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human label for this skill's role in the pipeline."
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Numeric position in the pipeline (1-based). Same order = parallel alternatives."
+          },
+          "after": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+            "description": "Skills that should run before this one."
+          },
+          "before": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+            "description": "Skills that should run after this one."
+          }
+        },
+        "additionalProperties": false
+      },
+      "propertyNames": { "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+      "description": "Loadout: pipeline/workflow participation with stage ordering."
     }
   },
   "additionalProperties": true

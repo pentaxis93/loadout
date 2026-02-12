@@ -14,7 +14,7 @@ pub use crossref::{
     build_reference_map, extract_references, extract_references_with_filter, CrossRef,
     DetectionMethod,
 };
-pub use frontmatter::Frontmatter;
+pub use frontmatter::{Frontmatter, PipelineStage};
 
 const SKILL_FILE_NAME: &str = "SKILL.md";
 

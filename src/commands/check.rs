@@ -475,6 +475,7 @@ mod tests {
                 compatibility: None,
                 metadata: None,
                 tags: None,
+                pipeline: None,
             },
         }
     }
