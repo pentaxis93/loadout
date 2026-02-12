@@ -1,6 +1,6 @@
 [package]
 name = "loadout"
-version = "0.2.0-dev"
+version = "0.3.5"
 edition = "2021"
 authors = ["Robbie Clarken <pentaxis93@proton.me>"]
 description = "Skill lifecycle management system for AI agents"

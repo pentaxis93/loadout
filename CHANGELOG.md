@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.5] — 2026-02-12
+
+Phases 2, 3, and 3.5: Rust CLI, analysis commands, and metadata.
+
 ### Added
 
 #### Phase 2 — Rust CLI
@@ -38,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Graph edge deduplication and `EdgeKind` (CrossRef vs Pipeline) distinction
 - Pipeline-aware checks: missing dependencies, asymmetric after/before declarations
 - Metadata coverage check for skills with no tags and no pipeline
+  (only fires when library is partially annotated)
 - Fix suggestions on every `loadout check` finding with `↳` prefix
 - `[check]` config section with `ignore` patterns for suppression
 - `loadout check --verbose` to show suppressed findings alongside active ones
@@ -61,5 +66,6 @@ Phase 1: Bash Scripts Implementation.
 - `DESIGN.md` documenting config format, skill structure, and
   resolution rules
 
-[Unreleased]: https://github.com/pentaxis93/loadout/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/pentaxis93/loadout/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/pentaxis93/loadout/compare/v0.1.0...v0.3.5
 [0.1.0]: https://github.com/pentaxis93/loadout/releases/tag/v0.1.0
