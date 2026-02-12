@@ -499,6 +499,22 @@ fn check_pipeline_integrity(all_skills: &[Skill], known_skills: &HashSet<String>
 }
 
 fn check_missing_metadata(all_skills: &[Skill]) -> Vec<Finding> {
+    // Only check when the library is partially annotated — at least one skill
+    // has tags or pipeline. This avoids noise for users who haven't adopted
+    // the metadata scheme.
+    let any_annotated = all_skills.iter().any(|s| {
+        s.frontmatter
+            .tags
+            .as_ref()
+            .map(|t| !t.is_empty())
+            .unwrap_or(false)
+            || s.frontmatter.pipeline.is_some()
+    });
+
+    if !any_annotated {
+        return Vec::new();
+    }
+
     let mut findings = Vec::new();
 
     for skill in all_skills {
@@ -776,9 +792,36 @@ mod tests {
     }
 
     #[test]
-    fn should_detect_missing_metadata() {
-        // Given: a skill with no tags and no pipeline
-        let skills = vec![test_skill("lonely-skill", "No metadata at all")];
+    fn should_detect_missing_metadata_when_library_is_partially_annotated() {
+        // Given: one tagged skill and one with no metadata
+        use crate::skill::frontmatter::Frontmatter;
+
+        let tagged_skill = Skill {
+            name: "tagged-skill".to_string(),
+            path: PathBuf::from("/test/skills/tagged-skill"),
+            skill_file: PathBuf::from("/test/skills/tagged-skill/SKILL.md"),
+            frontmatter: Frontmatter {
+                name: "tagged-skill".to_string(),
+                description: "Has tags".to_string(),
+                disable_model_invocation: None,
+                user_invocable: None,
+                allowed_tools: None,
+                context: None,
+                agent: None,
+                model: None,
+                argument_hint: None,
+                license: None,
+                compatibility: None,
+                metadata: None,
+                tags: Some(vec!["example".to_string()]),
+                pipeline: None,
+            },
+        };
+
+        let skills = vec![
+            tagged_skill,
+            test_skill("lonely-skill", "No metadata at all"),
+        ];
 
         // When
         let findings = check_missing_metadata(&skills);
@@ -787,6 +830,21 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Info);
         assert!(findings[0].message.contains("lonely-skill"));
+    }
+
+    #[test]
+    fn should_skip_missing_metadata_check_when_no_skills_are_annotated() {
+        // Given: all skills lack tags and pipeline
+        let skills = vec![
+            test_skill("skill-a", "No metadata"),
+            test_skill("skill-b", "Also no metadata"),
+        ];
+
+        // When
+        let findings = check_missing_metadata(&skills);
+
+        // Then: no findings — the library hasn't adopted metadata
+        assert!(findings.is_empty());
     }
 
     #[test]
