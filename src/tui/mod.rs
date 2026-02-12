@@ -17,9 +17,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::Paragraph,
     Frame, Terminal,
 };
+
+#[cfg(not(feature = "graph"))]
+use ratatui::widgets::{Block, Borders};
 use std::io;
 use std::time::Duration;
 

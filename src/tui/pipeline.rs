@@ -21,7 +21,7 @@ pub struct PipelineState {
 }
 
 /// Information about a detected pipeline
-struct PipelineInfo {
+pub(crate) struct PipelineInfo {
     name: String,
     stages: Vec<StageInfo>,
     skills: Vec<String>,
@@ -29,7 +29,7 @@ struct PipelineInfo {
     cross_pipeline: Vec<String>, // Skills that appear in multiple pipelines
 }
 
-struct StageInfo {
+pub(crate) struct StageInfo {
     name: String,
     skills: Vec<String>,
 }
@@ -56,7 +56,7 @@ impl PipelineState {
     }
 
     /// Get the currently selected pipeline
-    pub fn selected_pipeline(&self) -> Option<&PipelineInfo> {
+    pub(crate) fn selected_pipeline(&self) -> Option<&PipelineInfo> {
         let idx = self.list_state.selected()?;
         self.pipelines.get(idx)
     }
