@@ -1,9 +1,8 @@
 //! Dependency graph construction and analysis (requires `graph` feature)
 
-use petgraph::algo::{connected_components, tarjan_scc};
+use petgraph::algo::tarjan_scc;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use crate::skill::CrossRef;
