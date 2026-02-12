@@ -18,37 +18,36 @@ later phase being complete.
 | Version | Phase | Summary |
 |---------|-------|---------|
 | 0.1.0 | [Phase 1 — Bash Scripts](#phase-1--bash-scripts) | Original bash implementation (complete) |
-| 0.2.0 | [Phase 2 — Rust Parity](#phase-2--rust-parity) | Replace scripts with `loadout` binary |
-| 0.3.0 | [Phase 3 — Analysis & Intelligence](#phase-3--analysis--intelligence) | Cross-references, health checks, dependency graphs |
+| 0.2.0 | [Phase 2 — Rust Parity](#phase-2--rust-parity) | Replace scripts with `loadout` binary (complete) |
+| 0.3.0 | [Phase 3 — Analysis & Intelligence](#phase-3--analysis--intelligence) | Cross-references, health checks, dependency graphs (complete) |
+| 0.3.5 | [Phase 3.5 — Metadata & Actionable Output](#phase-35--metadata--actionable-output) | Tags, pipelines, actionable diagnostics (complete) |
 | 0.4.0 | [Phase 4 — TUI](#phase-4--tui) | Interactive terminal interface |
-| 0.5.0 | [Phase 5 — Composition & Evolution](#phase-5--composition--evolution) | Chains, tags, templates, gap analysis |
+| 0.5.0 | [Phase 5 — Lifecycle Management](#phase-5--lifecycle-management) | Tag/pipeline management, templates, gap analysis |
 
 ## Source layout
 
 ```
 src/
 ├── main.rs              # Entry point, clap CLI dispatch
-├── cli/
-│   ├── mod.rs           # Clap command definitions
+├── commands/
+│   ├── mod.rs           # Re-exports
 │   ├── install.rs       # loadout install
 │   ├── clean.rs         # loadout clean
-│   ├── list.rs          # loadout list
+│   ├── list.rs          # loadout list (all modes)
 │   ├── new.rs           # loadout new
 │   ├── validate.rs      # loadout validate
-│   ├── check.rs         # loadout check          (Phase 3)
-│   ├── graph.rs         # loadout graph           (Phase 3)
-│   └── tui.rs           # loadout tui             (Phase 4)
+│   ├── check.rs         # loadout check
+│   └── graph.rs         # loadout graph
 ├── config/
 │   ├── mod.rs           # Config loading + path resolution
 │   └── types.rs         # Serde structs for loadout.toml
 ├── skill/
 │   ├── mod.rs           # Skill resolution, discovery
 │   ├── frontmatter.rs   # YAML frontmatter parsing + validation
-│   └── crossref.rs      # Cross-reference extraction (Phase 3)
+│   └── crossref.rs      # Cross-reference extraction
 ├── linker/
-│   ├── mod.rs           # Symlink creation, marker management
-│   └── clean.rs         # Symlink removal
-├── graph/               # Phase 3, behind `graph` feature
+│   └── mod.rs           # Symlink creation, marker management, cleanup
+├── graph/
 │   └── mod.rs           # Dependency graph construction + analysis
 └── tui/                 # Phase 4, behind `tui` feature
     ├── mod.rs           # Ratatui app loop
@@ -62,8 +61,8 @@ Design decisions:
 - Each bash script becomes a subcommand (`loadout install`, not `loadout --install`).
 - `config`, `skill`, and `linker` are independent library modules. The CLI is
   a thin dispatch layer over them.
-- Feature gates (`tui`, `graph`) keep optional dependencies out of the default
-  binary.
+- Feature gates (`tui`) keep optional dependencies out of the default binary.
+  The `graph` feature is enabled by default.
 - `thiserror` for typed library errors, `anyhow` for CLI-level propagation.
 
 ---
@@ -96,7 +95,9 @@ Provides core symlink management functionality.
 
 ## Phase 2 — Rust Parity
 
-Replace all three bash scripts with a single Rust binary installed via
+**Status: Complete**
+
+Replaced all three bash scripts with a single Rust binary installed via
 `cargo install --path .`.
 
 ### Commands
@@ -108,71 +109,44 @@ Replace all three bash scripts with a single Rust binary installed via
 | `loadout clean` | `install.sh --clean` | Remove managed symlinks + markers |
 | `loadout list` | `install.sh --list` | Show sources, targets, skills, resolution paths |
 | `loadout validate [name]` | `validate.sh [name]` | Validate skill frontmatter |
-| `loadout validate --dir <path>` | `validate.sh /path` | Validate all skills in directory |
-| `loadout new <name> [--desc "..."]` | `new.sh <name> [desc]` | Scaffold new skill |
-| `loadout new <name> --dir <path>` | `new.sh --dir <path>` | Scaffold into specific directory |
-
-### Implementation order
-
-1. **`config/`** — TOML parsing with serde. Path expansion (`~` to `$HOME`).
-   XDG resolution. `$LOADOUT_CONFIG` override.
-2. **`skill/frontmatter.rs`** — Extract YAML between `---` delimiters. Parse
-   with `serde_yaml`. Validate name regex, length, directory match, description
-   constraints.
-3. **`skill/mod.rs`** — Walk source directories. Resolve skill by name (first
-   match wins). Enumerate all available skills.
-4. **`linker/`** — Create/remove symlinks. Marker file management
-   (`.managed-by-loadout`). Conflict detection for existing non-managed
-   directories.
-5. **`cli/install.rs`** — Wire config + skill resolution + linker. Validate
-   all skills before linking. Support `--dry-run`.
-6. **`cli/clean.rs`** — Walk target directories, remove managed symlinks +
-   markers, remove empty directories.
-7. **`cli/list.rs`** — Enumerate sources with skill counts, global targets,
-   skill-to-source resolution, project entries.
-8. **`cli/validate.rs`** — Single skill, all skills, or directory mode. Report
-   pass/fail with description preview.
-9. **`cli/new.rs`** — Scaffold skill directory + SKILL.md from embedded template.
+| `loadout validate <dir>` | `validate.sh /path` | Validate all skills in directory |
+| `loadout new <name> [-d "..."]` | `new.sh <name> [desc]` | Scaffold new skill |
 
 ### Acceptance criteria
 
-- [ ] `loadout install` produces identical symlink layout to `install.sh`
-- [ ] `loadout clean` removes exactly what `install.sh --clean` removes
-- [ ] `loadout list` output covers same information as `install.sh --list`
-- [ ] `loadout validate` catches same errors as `validate.sh`
-- [ ] `loadout new` produces same SKILL.md structure as `new.sh`
-- [ ] No Python dependency at runtime
-- [ ] `cargo install --path .` places binary in `~/.cargo/bin/loadout`
-
-### Transition
-
-Bash scripts remain in `scripts/` during Phase 2 for behavioral reference.
-Once acceptance criteria pass, move them to `scripts/legacy/` or remove them.
-Update README to show `cargo install --path .` as the install method.
+- [x] `loadout install` produces identical symlink layout to `install.sh`
+- [x] `loadout clean` removes exactly what `install.sh --clean` removes
+- [x] `loadout list` output covers same information as `install.sh --list`
+- [x] `loadout validate` catches same errors as `validate.sh`
+- [x] `loadout new` produces same SKILL.md structure as `new.sh`
+- [x] No Python dependency at runtime
+- [x] `cargo install --path .` places binary in `~/.cargo/bin/loadout`
 
 ---
 
 ## Phase 3 — Analysis & Intelligence
 
-Move beyond install tooling into skill system analysis. This is where loadout
-becomes more than a symlink manager.
+**Status: Complete**
+
+Moved beyond install tooling into skill system analysis. This is where
+loadout became more than a symlink manager.
 
 ### 3a. Cross-reference extraction
 
-`skill/crossref.rs` — Parse SKILL.md body content (not just frontmatter) to
-extract references to other skills. Detection heuristics:
+`skill/crossref.rs` — Parses SKILL.md body content (not just frontmatter)
+to extract references to other skills. Detection heuristics:
 
 - Explicit mentions in "Related skills" or "Integration" tables
 - Backtick-quoted names matching the skill name pattern
 - Phrases like "invoke the X skill", "load X first", "use X" adjacent to
   known skill names
-- Frontmatter references (if skills declare dependencies explicitly)
+- XML `<crossref>` elements
 
 Builds an in-memory dependency graph of skill relationships.
 
 ### 3b. `loadout check`
 
-A diagnostic command reporting:
+A diagnostic command reporting health issues with actionable fix suggestions:
 
 | Check | Severity |
 |-------|----------|
@@ -183,14 +157,13 @@ A diagnostic command reporting:
 | Broken symlinks in target directories | error |
 | Unmanaged conflicts in target directories | warning |
 | Empty or placeholder descriptions | warning |
-| Circular references | info |
 
-Output grouped by severity with actionable messages.
+Output grouped by severity with fix suggestions on every finding.
 
 ### 3c. `loadout graph`
 
-Behind the `graph` feature flag. Uses petgraph to build the skill dependency
-graph with multiple output formats:
+Uses petgraph to build the skill dependency graph with multiple output
+formats:
 
 | Format | Flag | Use case |
 |--------|------|----------|
@@ -204,7 +177,6 @@ Additional analysis:
 - **Clusters** — groups of tightly connected skills
 - **Root skills** — no incoming references (entry points)
 - **Leaf skills** — no outgoing references (pure utilities)
-- **Bridge skills** — removal would disconnect clusters
 
 ### 3d. Enhanced `loadout list`
 
@@ -214,15 +186,97 @@ Additional analysis:
 
 ### Acceptance criteria
 
-- [ ] `loadout check` identifies dangling references in the current skill set
-- [ ] `loadout graph --format dot` produces valid Graphviz output
-- [ ] Detected clusters match natural groupings (content pipeline, design
+- [x] `loadout check` identifies dangling references in the current skill set
+- [x] `loadout graph --format dot` produces valid Graphviz output
+- [x] Detected clusters match natural groupings (content pipeline, design
       system, foundational, elicitation, QA)
-- [ ] All checks complete in under 1 second for 14 skills
+- [x] All checks complete in under 1 second for 23 skills
+
+---
+
+## Phase 3.5 — Metadata & Actionable Output
+
+**Status: Complete**
+
+Extended the skill format with metadata fields and made all analysis
+commands produce actionable output. Pulled forward from Phase 5 because
+tags and workflow ordering proved essential for meaningful analysis.
+
+### 3.5a. Tags
+
+Optional `tags` field in SKILL.md frontmatter:
+
+```yaml
+tags: [blog, writing, meta-skill]
+```
+
+- Kebab-case validated, stored as `Option<Vec<String>>`
+- `loadout list --tags` — all tags with skill counts
+- `loadout list --tag <tag>` — filter skills by tag
+- `loadout graph --tag <tag>` — filter graph to tagged skills
+
+### 3.5b. Pipelines
+
+Optional `pipeline` field declaring workflow stage ordering:
+
+```yaml
+pipeline:
+  blog-production:
+    stage: compile
+    order: 3
+    after: [story-spine]
+    before: [blog-edit]
+```
+
+- Skills can participate in multiple pipelines
+- `after`/`before` are cross-validated for consistency
+- `loadout list --pipelines` — all pipelines with stage summaries
+- `loadout list --pipeline <name>` — pipeline in stage order
+- `loadout graph --pipeline <name>` — filter graph to pipeline skills
+
+### 3.5c. Actionable check output
+
+Every `loadout check` finding now includes a concrete fix suggestion:
+
+| Finding | Fix suggestion |
+|---------|---------------|
+| Dangling reference | `loadout new <name>`, or remove the reference |
+| Orphaned skill | Add to `[global].skills` in loadout.toml |
+| Pipeline gap (asymmetric after/before) | Add missing reciprocal declaration |
+| Pipeline references non-existent skill | Create or remove from after/before |
+| No tags and no pipeline | Add metadata (only when library is partially annotated) |
+
+Suppression via `[check.ignore]` in loadout.toml:
+
+```toml
+[check]
+ignore = ["dangling:skill-format:related-skill"]
+```
+
+`--verbose` flag reveals suppressed findings.
+
+### 3.5d. Graph enhancements
+
+- Edge deduplication (same pair, different detection methods → single edge)
+- `EdgeKind` distinguishes CrossRef (content-detected) from Pipeline (declared)
+- Pipeline edges rendered distinctly (dashed/blue in DOT, dotted in Mermaid)
+
+### Acceptance criteria
+
+- [x] Tags validated and parsed from frontmatter
+- [x] Pipeline stages validated with order and dependency references
+- [x] Every finding type has a non-empty fix suggestion
+- [x] Pipeline integrity checks detect missing deps and asymmetric declarations
+- [x] No-metadata check only fires when library is partially annotated
+- [x] Suppression via `[check.ignore]` works; `--verbose` reveals suppressed
+- [x] Graph filtering by `--pipeline` and `--tag` works for all output formats
+- [x] 111 tests passing, clippy clean
 
 ---
 
 ## Phase 4 — TUI
+
+**Status: Future**
 
 Interactive terminal interface using ratatui. Behind the `tui` feature flag.
 
@@ -233,7 +287,7 @@ Interactive terminal interface using ratatui. Behind the `tui` feature flag.
   broken)
 - Preview pane showing description + frontmatter
 - Toggle skills on/off per scope (global, per-project)
-- Search/filter by name, description, group
+- Search/filter by name, description, tag, pipeline
 
 **Graph View**
 - Box-drawing dependency graph
@@ -268,39 +322,31 @@ Interactive terminal interface using ratatui. Behind the `tui` feature flag.
 
 ---
 
-## Phase 5 — Composition & Evolution
+## Phase 5 — Lifecycle Management
 
-Features that help the skill system itself evolve.
+**Status: Future**
 
-### 5a. Skill chains
+Features that help the skill system itself evolve over time. The focus
+shifts from analysis (reading) to management (writing).
 
-Named sequences for common workflows, defined in config:
+### 5a. Tag and pipeline management
 
-```toml
-[chains]
-publish = ["seed-craft", "story-spine", "story-compiler", "strangers-eye"]
-design  = ["web-design", "screenshot", "design-loop"]
-```
+Mutation commands for metadata that currently requires hand-editing SKILL.md
+frontmatter:
 
-`loadout chain <name>` lists the skills in order with descriptions, verifying
-all are present and installed. Informational — it documents workflows and
-validates completeness, it does not invoke skills.
+| Command | Effect |
+|---------|--------|
+| `loadout tag rename <old> <new>` | Rename a tag across all skills |
+| `loadout list --untagged` | Show skills with no tags |
+| `loadout list --unpipelined` | Show skills not in any pipeline |
+| `loadout pipeline add <skill> <pipeline>` | Add a skill to a pipeline |
+| `loadout pipeline remove <skill> <pipeline>` | Remove a skill from a pipeline |
 
-### 5b. Skill groups / tags
+The hard problem is frontmatter rewriting — modifying YAML inside a markdown
+file without mangling the surrounding content. This likely requires a
+roundtrip-safe YAML approach rather than full parse-and-serialize.
 
-Optional `tags` field in frontmatter:
-
-```yaml
-name: story-compiler
-description: ...
-tags: [content-pipeline, writing]
-```
-
-- `loadout list --tag <tag>` — filter by tag
-- `loadout list --tags` — show all tags with counts
-- Untagged skills fall back to auto-detected graph clusters from Phase 3
-
-### 5c. Skill templates
+### 5b. Skill templates
 
 Extend `loadout new` with `--from <template>`:
 
@@ -309,19 +355,20 @@ Extend `loadout new` with `--from <template>`:
 - `loadout new my-skill --from <existing-skill>` — copy structure from
   another skill
 
-### 5d. Gap analysis
+### 5c. Gap analysis
 
 `loadout gaps` — combines graph analysis with cross-reference data to report:
 
 - Skills referenced but not present (create candidates)
 - Clusters with single points of failure (bridge nodes at risk)
 - Skills with no references in or out (isolated — still useful?)
-- Workflow chains with missing steps
+- Pipelines with missing stages (order gaps)
 
 ### Acceptance criteria
 
-- [ ] Chains validate that all referenced skills exist and are installed
-- [ ] Tags are optional — untagged skills work everywhere
+- [ ] Tag rename updates all SKILL.md files without corrupting content
+- [ ] Pipeline add/remove correctly modifies frontmatter YAML
+- [ ] Templates produce valid skills that pass `loadout validate`
 - [ ] Gap analysis identifies referenced-but-missing skills as creation
       candidates
 
@@ -331,10 +378,10 @@ Extend `loadout new` with `--from <template>`:
 
 These are recorded for future consideration. None block current work.
 
-**Config evolution.** Phase 5 adds `[chains]` and skill-level `tags`. Tags
-belong in SKILL.md frontmatter (skill metadata, portable). Chains belong in
-`loadout.toml` (user configuration, personal). This split keeps skills
-portable and chains personal.
+**Frontmatter rewriting.** Phase 5a requires modifying YAML inside markdown
+files. Options: regex-based surgery (fragile), roundtrip YAML parser
+(complex), or a template-based approach that rewrites the entire frontmatter
+block. Worth prototyping before committing to an approach.
 
 **Drop-in config fragments.** Should loadout support `loadout.d/*.toml` for
 composing config from multiple files? Useful for separating global from
@@ -344,3 +391,15 @@ module design.
 **Remote sources.** Should `[sources].skills` eventually support git URLs
 for team/community skill sharing? Significant scope increase — probably a
 Phase 6 concern if it ever becomes one.
+
+## Resolved questions
+
+**Tags in frontmatter vs config.** Resolved: tags belong in SKILL.md
+frontmatter (portable with the skill). Delivered in Phase 3.5.
+
+**Chains vs pipelines.** The original Phase 5 proposed `[chains]` in
+loadout.toml — named sequences of skills for common workflows. This was
+superseded by the `pipeline` frontmatter field, which is more expressive
+(stages, ordering, dependency cross-validation) and portable (travels with
+the skill, not locked to one user's config). The config-based chain concept
+is retired.
