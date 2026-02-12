@@ -108,6 +108,10 @@ annotated config.
 | `loadout graph --format json` | Export dependency graph as JSON |
 | `loadout graph --format mermaid` | Render dependency graph as Mermaid diagram |
 | `loadout list` | Show enabled skills per scope with paths |
+| `loadout list --tags` | Show all tags with skill counts |
+| `loadout list --tag <tag>` | Show skills with a specific tag |
+| `loadout list --pipelines` | Show all pipelines with stage summaries |
+| `loadout list --pipeline <name>` | Show a pipeline in stage order with dependencies |
 | `loadout list --groups` | Organize skills by detected cluster |
 | `loadout list --refs <skill>` | Show incoming and outgoing references for a skill |
 | `loadout list --missing` | Show only missing skills (dangling references) |
@@ -172,6 +176,27 @@ Instructions the agent receives when it loads this skill.
 | `context: fork` | Run in an isolated subagent |
 | `agent: Explore` | Subagent type for `context: fork` |
 | `argument-hint: [issue-number]` | Autocomplete hint |
+
+**Loadout metadata** (used by loadout commands, ignored by agents):
+
+| Field | Effect |
+|-------|--------|
+| `tags: [blog, writing]` | Classification tags for filtering and grouping |
+| `pipeline:` | Workflow participation with stage ordering (see below) |
+
+Pipeline fields declare how a skill fits into a workflow:
+
+```yaml
+pipeline:
+  blog-production:
+    stage: compile       # human label for this skill's role
+    order: 3             # numeric position (1-based)
+    after: [story-spine] # skills that run before this one
+    before: [blog-edit]  # skills that run after this one
+```
+
+A skill can participate in multiple pipelines. Use `loadout list --pipelines`
+to see all defined pipelines, and `loadout list --pipeline <name>` for detail.
 
 **OpenCode** (ignored by Claude Code):
 

@@ -49,6 +49,18 @@ enum Commands {
         /// Show only missing skills (dangling references)
         #[arg(long)]
         missing: bool,
+        /// Show all tags with skill counts
+        #[arg(long)]
+        tags: bool,
+        /// Show skills with a specific tag
+        #[arg(long)]
+        tag: Option<String>,
+        /// Show all pipelines with skill counts
+        #[arg(long)]
+        pipelines: bool,
+        /// Show a specific pipeline in stage order
+        #[arg(long)]
+        pipeline: Option<String>,
     },
     /// Validate SKILL.md files
     Validate {
@@ -114,6 +126,10 @@ fn main() -> Result<()> {
             groups,
             refs,
             missing,
+            tags,
+            tag,
+            pipelines,
+            pipeline,
         } => {
             let mode = if groups {
                 commands::list::ListMode::Groups
@@ -121,6 +137,14 @@ fn main() -> Result<()> {
                 commands::list::ListMode::Refs(skill_name)
             } else if missing {
                 commands::list::ListMode::Missing
+            } else if tags {
+                commands::list::ListMode::Tags
+            } else if let Some(tag_name) = tag {
+                commands::list::ListMode::Tag(tag_name)
+            } else if pipelines {
+                commands::list::ListMode::Pipelines
+            } else if let Some(pipeline_name) = pipeline {
+                commands::list::ListMode::Pipeline(pipeline_name)
             } else {
                 commands::list::ListMode::Default
             };
