@@ -1,5 +1,6 @@
 //! Interactive TUI for skill management (requires `tui` feature)
 
+mod health;
 mod skill_browser;
 
 use anyhow::Result;
@@ -77,12 +78,16 @@ pub struct App {
     pub should_quit: bool,
     /// Skill browser view state
     pub skill_browser_state: skill_browser::SkillBrowserState,
+    /// Health panel view state
+    pub health_panel_state: health::HealthPanelState,
 }
 
 impl App {
     /// Create a new TUI app with the given config and skills
     pub fn new(config: Config, skills: Vec<Skill>) -> Self {
         let skill_browser_state = skill_browser::SkillBrowserState::new(&skills);
+        let mut health_panel_state = health::HealthPanelState::new();
+        health_panel_state.refresh(&config, &skills);
         App {
             config,
             skills,
@@ -90,6 +95,7 @@ impl App {
             status_message: "Ready".to_string(),
             should_quit: false,
             skill_browser_state,
+            health_panel_state,
         }
     }
 
@@ -219,6 +225,21 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                                 .update_filter(String::new(), &app.skills);
                             app.status_message = "Filter cleared".to_string();
                         }
+                        // Health panel navigation
+                        KeyCode::Char('j') | KeyCode::Down
+                            if app.active_view == ActiveView::HealthPanel =>
+                        {
+                            app.health_panel_state.next();
+                        }
+                        KeyCode::Char('k') | KeyCode::Up
+                            if app.active_view == ActiveView::HealthPanel =>
+                        {
+                            app.health_panel_state.previous();
+                        }
+                        KeyCode::Char('r') if app.active_view == ActiveView::HealthPanel => {
+                            app.health_panel_state.refresh(&app.config, &app.skills);
+                            app.status_message = "Health check refreshed".to_string();
+                        }
                         _ => {}
                     }
                 }
@@ -248,6 +269,9 @@ fn ui(f: &mut Frame, app: &mut App) {
                 &app.skills,
                 &mut app.skill_browser_state,
             );
+        }
+        ActiveView::HealthPanel => {
+            health::render(f, chunks[0], &mut app.health_panel_state);
         }
         _ => {
             // Placeholder for other views
