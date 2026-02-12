@@ -474,6 +474,7 @@ mod tests {
                 license: None,
                 compatibility: None,
                 metadata: None,
+                tags: None,
             },
         }
     }

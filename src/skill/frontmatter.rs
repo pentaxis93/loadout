@@ -38,6 +38,9 @@ pub enum FrontmatterError {
 
     #[error("Skill name '{found}' does not match directory name '{expected}'")]
     NameMismatch { expected: String, found: String },
+
+    #[error("Invalid tag format '{0}': must match pattern {NAME_PATTERN}")]
+    InvalidTagFormat(String),
 }
 
 /// SKILL.md frontmatter
@@ -87,6 +90,11 @@ pub struct Frontmatter {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<HashMap<String, String>>,
+
+    // Loadout metadata fields (optional)
+    /// Flat classification tags for grouping skills by function/domain
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
 }
 
 impl Frontmatter {
@@ -114,6 +122,7 @@ impl Frontmatter {
     pub fn validate(&self) -> Result<()> {
         self.validate_name()?;
         self.validate_description()?;
+        self.validate_tags()?;
         Ok(())
     }
 
@@ -129,6 +138,19 @@ impl Frontmatter {
             return Err(FrontmatterError::InvalidNamePattern(self.name.clone()).into());
         }
 
+        Ok(())
+    }
+
+    /// Validate tags if present
+    fn validate_tags(&self) -> Result<()> {
+        if let Some(tags) = &self.tags {
+            let re = Regex::new(NAME_PATTERN).unwrap();
+            for tag in tags {
+                if !re.is_match(tag) {
+                    return Err(FrontmatterError::InvalidTagFormat(tag.clone()).into());
+                }
+            }
+        }
         Ok(())
     }
 
@@ -409,5 +431,90 @@ Content after frontmatter"#;
         assert!(frontmatter
             .description
             .contains("minimal test skill for integration tests"));
+    }
+
+    #[test]
+    fn should_parse_tags_from_inline_list() {
+        // Given
+        let content = r#"---
+name: my-skill
+description: A test skill
+tags: [blog, content-pipeline]
+---"#;
+
+        // When
+        let frontmatter = Frontmatter::parse(content).unwrap();
+
+        // Then
+        let tags = frontmatter.tags.unwrap();
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0], "blog");
+        assert_eq!(tags[1], "content-pipeline");
+    }
+
+    #[test]
+    fn should_parse_tags_from_block_list() {
+        // Given
+        let content = "---\nname: my-skill\ndescription: A test skill\ntags:\n  - blog\n  - content-pipeline\n---";
+
+        // When
+        let frontmatter = Frontmatter::parse(content).unwrap();
+
+        // Then
+        let tags = frontmatter.tags.unwrap();
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0], "blog");
+        assert_eq!(tags[1], "content-pipeline");
+    }
+
+    #[test]
+    fn should_parse_empty_tags_list() {
+        // Given
+        let content = r#"---
+name: my-skill
+description: A test skill
+tags: []
+---"#;
+
+        // When
+        let frontmatter = Frontmatter::parse(content).unwrap();
+
+        // Then
+        let tags = frontmatter.tags.unwrap();
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn should_parse_missing_tags_as_none() {
+        // Given
+        let content = r#"---
+name: my-skill
+description: A test skill
+---"#;
+
+        // When
+        let frontmatter = Frontmatter::parse(content).unwrap();
+
+        // Then
+        assert!(frontmatter.tags.is_none());
+    }
+
+    #[test]
+    fn should_reject_invalid_tag_format() {
+        // Given
+        let content = r#"---
+name: my-skill
+description: A test skill
+tags: [valid-tag, Invalid_Tag]
+---"#;
+
+        // When
+        let result = Frontmatter::parse(content);
+
+        // Then
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Invalid tag format"));
+        assert!(err.to_string().contains("Invalid_Tag"));
     }
 }

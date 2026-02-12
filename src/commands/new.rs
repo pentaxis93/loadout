@@ -11,6 +11,7 @@ const TEMPLATE_CONTENT: &str = r#"---
 name: {name}
 description: >-
   {description}
+# tags: []
 ---
 
 # {name}
