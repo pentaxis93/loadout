@@ -1,6 +1,7 @@
 //! Interactive TUI for skill management (requires `tui` feature)
 
 mod health;
+mod installer;
 mod skill_browser;
 
 use anyhow::Result;
@@ -80,6 +81,8 @@ pub struct App {
     pub skill_browser_state: skill_browser::SkillBrowserState,
     /// Health panel view state
     pub health_panel_state: health::HealthPanelState,
+    /// Install dashboard view state
+    pub installer_state: installer::InstallerState,
 }
 
 impl App {
@@ -88,6 +91,7 @@ impl App {
         let skill_browser_state = skill_browser::SkillBrowserState::new(&skills);
         let mut health_panel_state = health::HealthPanelState::new();
         health_panel_state.refresh(&config, &skills);
+        let installer_state = installer::InstallerState::new();
         App {
             config,
             skills,
@@ -96,6 +100,7 @@ impl App {
             should_quit: false,
             skill_browser_state,
             health_panel_state,
+            installer_state,
         }
     }
 
@@ -240,6 +245,19 @@ fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut A
                             app.health_panel_state.refresh(&app.config, &app.skills);
                             app.status_message = "Health check refreshed".to_string();
                         }
+                        // Install dashboard operations
+                        KeyCode::Char('i') if app.active_view == ActiveView::InstallDashboard => {
+                            match app.installer_state.install(&app.config, &app.skills) {
+                                Ok(msg) => app.status_message = msg,
+                                Err(e) => app.status_message = format!("Install failed: {}", e),
+                            }
+                        }
+                        KeyCode::Char('c') if app.active_view == ActiveView::InstallDashboard => {
+                            match app.installer_state.clean(&app.config) {
+                                Ok(msg) => app.status_message = msg,
+                                Err(e) => app.status_message = format!("Clean failed: {}", e),
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -272,6 +290,9 @@ fn ui(f: &mut Frame, app: &mut App) {
         }
         ActiveView::HealthPanel => {
             health::render(f, chunks[0], &mut app.health_panel_state);
+        }
+        ActiveView::InstallDashboard => {
+            installer::render(f, chunks[0], &app.config, &app.skills, &app.installer_state);
         }
         _ => {
             // Placeholder for other views
