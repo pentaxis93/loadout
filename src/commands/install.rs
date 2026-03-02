@@ -8,9 +8,8 @@ use colored::Colorize;
 
 use crate::config::Config;
 use crate::linker;
+use crate::paths;
 use crate::skill;
-
-const PROJECT_SUBDIRS: &[&str] = &[".claude/skills", ".opencode/skills", ".agents/skills"];
 
 /// Install skills by creating symlinks in target directories
 ///
@@ -78,8 +77,7 @@ fn install_project_skills(
             project_path.display()
         );
 
-        for subdir in PROJECT_SUBDIRS {
-            let target = project_path.join(subdir);
+        for target in paths::project_targets(project_path) {
             println!("Target: {}", target.display());
 
             // Link global skills if inherit is true
@@ -256,8 +254,7 @@ mod tests {
         install(&config, false).unwrap();
 
         // Then
-        for subdir in PROJECT_SUBDIRS {
-            let target = temp.path().join("project").join(subdir);
+        for target in paths::project_targets(&temp.path().join("project")) {
             assert!(target.join("test-skill").exists());
             assert!(target.join("another-skill").exists());
         }

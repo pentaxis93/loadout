@@ -8,4 +8,5 @@ pub mod config;
 #[cfg(feature = "graph")]
 pub mod graph;
 pub mod linker;
+pub mod paths;
 pub mod skill;

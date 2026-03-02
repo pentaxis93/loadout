@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::config::Config;
+use crate::paths;
 use crate::skill::{self, Skill};
 
 const MARKER_FILE: &str = ".managed-by-loadout";
@@ -290,13 +291,7 @@ fn check_missing_frontmatter(all_skills: &[Skill]) -> Vec<Finding> {
 
 fn check_broken_symlinks(config: &Config) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
-
-    let mut all_targets = config.global.targets.clone();
-    for project_path in config.projects.keys() {
-        all_targets.push(project_path.join(".claude/skills"));
-        all_targets.push(project_path.join(".opencode/skills"));
-        all_targets.push(project_path.join(".agents/skills"));
-    }
+    let all_targets = all_check_targets(config);
 
     for target in &all_targets {
         if !target.exists() {
@@ -326,13 +321,7 @@ fn check_broken_symlinks(config: &Config) -> Result<Vec<Finding>> {
 
 fn check_unmanaged_conflicts(config: &Config) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
-
-    let mut all_targets = config.global.targets.clone();
-    for project_path in config.projects.keys() {
-        all_targets.push(project_path.join(".claude/skills"));
-        all_targets.push(project_path.join(".opencode/skills"));
-        all_targets.push(project_path.join(".agents/skills"));
-    }
+    let all_targets = all_check_targets(config);
 
     for target in &all_targets {
         if !target.exists() {
@@ -366,6 +355,14 @@ fn check_unmanaged_conflicts(config: &Config) -> Result<Vec<Finding>> {
     }
 
     Ok(findings)
+}
+
+fn all_check_targets(config: &Config) -> Vec<PathBuf> {
+    let mut all_targets = config.global.targets.clone();
+    for project_path in config.projects.keys() {
+        all_targets.extend(paths::project_targets(project_path));
+    }
+    all_targets
 }
 
 fn check_placeholder_descriptions(all_skills: &[Skill]) -> Vec<Finding> {

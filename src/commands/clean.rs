@@ -5,8 +5,7 @@ use colored::Colorize;
 
 use crate::config::Config;
 use crate::linker;
-
-const PROJECT_SUBDIRS: &[&str] = &[".claude/skills", ".opencode/skills", ".agents/skills"];
+use crate::paths;
 
 /// Remove all managed symlinks from target directories
 pub fn clean(config: &Config, dry_run: bool) -> Result<()> {
@@ -51,8 +50,7 @@ pub fn clean(config: &Config, dry_run: bool) -> Result<()> {
             project_path.display()
         );
 
-        for subdir in PROJECT_SUBDIRS {
-            let target = project_path.join(subdir);
+        for target in paths::project_targets(project_path) {
             if dry_run {
                 if linker::is_managed(&target) {
                     println!(
