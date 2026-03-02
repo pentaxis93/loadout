@@ -8,7 +8,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 /// Load configuration from the standard location
 ///
@@ -78,27 +78,30 @@ fn expand_tilde(path: &str) -> Result<PathBuf> {
 fn expand_paths(config: &mut Config) -> Result<()> {
     // Expand source paths
     for source in &mut config.sources.skills {
-        if let Some(path_str) = source.to_str() {
-            *source = expand_tilde(path_str)?;
-        }
+        let path_str = source
+            .to_str()
+            .ok_or_else(|| anyhow!("sources.skills contains non-UTF-8 path"))?;
+        *source = expand_tilde(path_str)?;
     }
 
     // Expand global target paths
     for target in &mut config.global.targets {
-        if let Some(path_str) = target.to_str() {
-            *target = expand_tilde(path_str)?;
-        }
+        let path_str = target
+            .to_str()
+            .ok_or_else(|| anyhow!("global.targets contains non-UTF-8 path"))?;
+        *target = expand_tilde(path_str)?;
     }
 
     // Expand project paths (both keys and target paths if they exist)
     let project_keys: Vec<PathBuf> = config.projects.keys().cloned().collect();
     for old_key in project_keys {
-        if let Some(key_str) = old_key.to_str() {
-            let new_key = expand_tilde(key_str)?;
-            if new_key != old_key {
-                if let Some(project) = config.projects.remove(&old_key) {
-                    config.projects.insert(new_key, project);
-                }
+        let key_str = old_key
+            .to_str()
+            .ok_or_else(|| anyhow!("projects contains non-UTF-8 path key"))?;
+        let new_key = expand_tilde(key_str)?;
+        if new_key != old_key {
+            if let Some(project) = config.projects.remove(&old_key) {
+                config.projects.insert(new_key, project);
             }
         }
     }
@@ -228,5 +231,34 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Failed to parse config file"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn should_return_error_when_config_contains_non_utf8_paths() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        // Given
+        let mut config = Config {
+            sources: Sources {
+                skills: vec![PathBuf::from(OsString::from_vec(vec![
+                    0x66, 0x6f, 0x80, 0x6f,
+                ]))],
+            },
+            global: Global {
+                targets: vec![],
+                skills: vec![],
+            },
+            projects: Default::default(),
+            check: Default::default(),
+        };
+
+        // When
+        let result = expand_paths(&mut config);
+
+        // Then
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("non-UTF-8 path"));
     }
 }
