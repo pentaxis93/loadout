@@ -606,8 +606,18 @@ pub fn exit_code(findings: &[Finding]) -> i32 {
 mod tests {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::symlink;
+    use std::path::Path;
     use tempfile::TempDir;
+
+    #[cfg(unix)]
+    fn create_symlink(source: &Path, link_path: &Path) {
+        std::os::unix::fs::symlink(source, link_path).unwrap();
+    }
+
+    #[cfg(windows)]
+    fn create_symlink(source: &Path, link_path: &Path) {
+        std::os::windows::fs::symlink_dir(source, link_path).unwrap();
+    }
 
     // Helper to create a test skill
     fn test_skill(name: &str, description: &str) -> Skill {
@@ -718,12 +728,10 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let config = test_config_with_project(&temp);
         let agents_target = temp.path().join("project/.agents/skills");
+        let missing_target = temp.path().join("missing-target");
+        let broken_link = agents_target.join("broken-skill");
         fs::create_dir_all(&agents_target).unwrap();
-        symlink(
-            temp.path().join("missing-target"),
-            agents_target.join("broken-skill"),
-        )
-        .unwrap();
+        create_symlink(&missing_target, &broken_link);
 
         // When
         let findings = check_broken_symlinks(&config).unwrap();

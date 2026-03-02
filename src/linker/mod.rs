@@ -1,7 +1,6 @@
 //! Symlink creation, removal, and marker management
 
 use std::fs;
-use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -61,8 +60,7 @@ pub fn link_skill(skill_name: &str, skill_path: &Path, target_dir: &Path) -> Res
     }
 
     // Create the symlink
-    unix_fs::symlink(skill_path, &link_path)
-        .context(format!("Failed to create symlink: {}", link_path.display()))?;
+    create_symlink(skill_path, &link_path)?;
 
     Ok(())
 }
@@ -148,6 +146,20 @@ pub fn is_managed(target_dir: &Path) -> bool {
 /// Remove a symlink
 fn remove_symlink(path: &Path) -> Result<()> {
     fs::remove_file(path).context(format!("Failed to remove symlink: {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn create_symlink(source: &Path, link_path: &Path) -> Result<()> {
+    std::os::unix::fs::symlink(source, link_path)
+        .context(format!("Failed to create symlink: {}", link_path.display()))?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn create_symlink(source: &Path, link_path: &Path) -> Result<()> {
+    std::os::windows::fs::symlink_dir(source, link_path)
+        .context(format!("Failed to create symlink: {}", link_path.display()))?;
     Ok(())
 }
 
