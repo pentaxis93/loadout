@@ -16,7 +16,7 @@ Your skills live wherever you want. Loadout wires them up.
 └── skills/                   your skill definitions
     └── <name>/SKILL.md
 
-         ↓ install.sh
+         ↓ loadout install
 
 ~/.claude/skills/             → Claude Code discovers them
 ~/.config/opencode/skills/    → OpenCode discovers them
@@ -57,7 +57,9 @@ loadout install
 
 `~/.config/loadout/loadout.toml` controls everything.
 
-Override the config path with `$LOADOUT_CONFIG` or `$XDG_CONFIG_HOME`:
+Override the config path with `$LOADOUT_CONFIG` or `$XDG_CONFIG_HOME`.
+If `XDG_CONFIG_HOME` is set, loadout resolves config at
+`$XDG_CONFIG_HOME/loadout/loadout.toml`.
 
 ```bash
 # Use an alternate config
