@@ -73,7 +73,9 @@ pub struct PipelineStage {
 /// SKILL.md frontmatter
 ///
 /// This struct represents the union of all supported frontmatter fields
-/// across Claude Code and OpenCode. Only `name` and `description` are required.
+/// across Claude Code and OpenCode. Unknown fields are preserved by
+/// parser behavior and allowed for Codex/tool-specific metadata.
+/// Only `name` and `description` are required.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Frontmatter {
     /// Skill identifier (must match directory name)

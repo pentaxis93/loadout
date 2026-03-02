@@ -78,16 +78,16 @@ personal directory. The install script will use yours.
 
 ## Compatibility
 
-Both OpenCode and Claude Code discover skills from:
+OpenCode, Claude Code, and Codex discover skills from:
 
 | Path | Scope | Tool |
 |------|-------|------|
-| `.claude/skills/<name>/SKILL.md` | Project | Both |
-| `~/.claude/skills/<name>/SKILL.md` | Global | Both |
+| `.claude/skills/<name>/SKILL.md` | Project | Claude Code |
+| `~/.claude/skills/<name>/SKILL.md` | Global | Claude Code |
 | `.opencode/skills/<name>/SKILL.md` | Project | OpenCode |
 | `~/.config/opencode/skills/<name>/SKILL.md` | Global | OpenCode |
-| `.agents/skills/<name>/SKILL.md` | Project | Both |
-| `~/.agents/skills/<name>/SKILL.md` | Global | Both |
+| `.agents/skills/<name>/SKILL.md` | Project | Codex and compatible tools |
+| `~/.agents/skills/<name>/SKILL.md` | Global | Codex and compatible tools |
 
 The install script symlinks into the appropriate target paths.
 Claude Code extensions in frontmatter (`disable-model-invocation`,

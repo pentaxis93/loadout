@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Explicitly documented Codex support via `~/.agents/skills` and `.agents/skills` discovery paths
+- Clarified compatibility wording across README, design docs, example config, and agent guidance
+- Updated frontmatter schema/docs to note permissive passthrough for tool-specific keys (including Codex)
+
+### Added
+- Regression tests for project `.agents/skills` handling in `install`, `clean`, and `check` commands
+
 ## [0.3.5] — 2026-02-12
 
 Phases 2, 3, and 3.5: Rust CLI, analysis commands, and metadata.

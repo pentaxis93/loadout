@@ -22,7 +22,7 @@ skills = [
 targets = [
   "~/.claude/skills",
   "~/.config/opencode/skills",
-  "~/.agents/skills",
+  "~/.agents/skills",           # Codex + compatible tools
 ]
 
 # List skill names to enable globally.

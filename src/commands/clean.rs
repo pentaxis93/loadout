@@ -167,6 +167,23 @@ mod tests {
     }
 
     #[test]
+    fn should_clean_agents_project_targets() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let config = create_test_config(&temp);
+        let project_target = temp.path().join("project/.agents/skills");
+
+        create_managed_target(&project_target, "test-skill");
+
+        // When
+        clean(&config, false).unwrap();
+
+        // Then
+        assert!(!project_target.join("test-skill").exists());
+        assert!(!linker::is_managed(&project_target));
+    }
+
+    #[test]
     fn should_not_clean_in_dry_run_mode() {
         // Given
         let temp = TempDir::new().unwrap();
