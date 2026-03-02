@@ -605,6 +605,9 @@ pub fn exit_code(findings: &[Finding]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
 
     // Helper to create a test skill
     fn test_skill(name: &str, description: &str) -> Skill {
@@ -630,6 +633,27 @@ mod tests {
                 tags: None,
                 pipeline: None,
             },
+        }
+    }
+
+    fn test_config_with_project(temp: &TempDir) -> Config {
+        let mut projects = HashMap::new();
+        projects.insert(
+            temp.path().join("project"),
+            crate::config::Project {
+                skills: vec![],
+                inherit: true,
+            },
+        );
+
+        Config {
+            sources: crate::config::Sources { skills: vec![] },
+            global: crate::config::Global {
+                targets: vec![temp.path().join("global-target")],
+                skills: vec![],
+            },
+            projects,
+            check: Default::default(),
         }
     }
 
@@ -686,6 +710,55 @@ mod tests {
         assert_eq!(findings[0].severity, Severity::Warning);
         assert!(findings[0].message.contains("skill-b"));
         assert!(findings[0].fix.contains("loadout.toml"));
+    }
+
+    #[test]
+    fn should_detect_broken_symlink_in_agents_project_directory() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let config = test_config_with_project(&temp);
+        let agents_target = temp.path().join("project/.agents/skills");
+        fs::create_dir_all(&agents_target).unwrap();
+        symlink(
+            temp.path().join("missing-target"),
+            agents_target.join("broken-skill"),
+        )
+        .unwrap();
+
+        // When
+        let findings = check_broken_symlinks(&config).unwrap();
+
+        // Then
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Error);
+        assert!(findings[0]
+            .path
+            .as_ref()
+            .unwrap()
+            .ends_with("project/.agents/skills/broken-skill"));
+    }
+
+    #[test]
+    fn should_detect_unmanaged_directory_in_agents_project_directory() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let config = test_config_with_project(&temp);
+        let agents_target = temp.path().join("project/.agents/skills");
+        let unmanaged_dir = agents_target.join("manual-skill");
+        fs::create_dir_all(&unmanaged_dir).unwrap();
+        fs::write(unmanaged_dir.join("SKILL.md"), "manual").unwrap();
+
+        // When
+        let findings = check_unmanaged_conflicts(&config).unwrap();
+
+        // Then
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, Severity::Warning);
+        assert!(findings[0]
+            .path
+            .as_ref()
+            .unwrap()
+            .ends_with("project/.agents/skills/manual-skill"));
     }
 
     #[test]

@@ -4,7 +4,7 @@ Development guide for coding agents working in the loadout repository.
 
 ## Project Overview
 
-**loadout** is a skill lifecycle management system for AI agents (OpenCode and Claude Code). It manages SKILL.md files by symlinking them from user-controlled directories into tool discovery paths.
+**loadout** is a skill lifecycle management system for AI agents (OpenCode, Claude Code, and Codex). It manages SKILL.md files by symlinking them from user-controlled directories into tool discovery paths.
 
 - **Language**: Rust (Edition 2021), currently in Phase 2 development (v0.2.0-dev)
 - **Phase 1**: Bash scripts implementation (complete, in `scripts/`)
@@ -285,12 +285,12 @@ resolve_skill
 - **Schema**: `schema/skill-frontmatter.json`
 
 ### Discovery Paths (Target Directories)
-- `~/.claude/skills/` (global, both tools)
+- `~/.claude/skills/` (global, Claude Code)
 - `~/.config/opencode/skills/` (global, OpenCode)
-- `~/.agents/skills/` (global, both tools)
-- `.claude/skills/` (project-local, both tools)
+- `~/.agents/skills/` (global, Codex + compatible tools)
+- `.claude/skills/` (project-local, Claude Code)
 - `.opencode/skills/` (project-local, OpenCode)
-- `.agents/skills/` (project-local, both tools)
+- `.agents/skills/` (project-local, Codex + compatible tools)
 
 ## SKILL.md Format
 

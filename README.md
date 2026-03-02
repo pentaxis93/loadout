@@ -3,8 +3,9 @@
 Skill management for AI development tools.
 
 Loadout is the tool that links your skills into the discovery paths
-that [OpenCode](https://opencode.ai) and
-[Claude Code](https://docs.anthropic.com/en/docs/claude-code) scan.
+that [OpenCode](https://opencode.ai),
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code), and
+[Codex](https://developers.openai.com/codex/skills) scan.
 Your skills live wherever you want. Loadout wires them up.
 
 ## How it works
@@ -19,7 +20,7 @@ Your skills live wherever you want. Loadout wires them up.
 
 ~/.claude/skills/             → Claude Code discovers them
 ~/.config/opencode/skills/    → OpenCode discovers them
-~/.agents/skills/             → Any compatible tool
+~/.agents/skills/             → Codex and other compatible tools discover them
 ```
 
 The repo contains the scripts and schema. Your personal config and
@@ -143,20 +144,22 @@ Use `loadout --help` or `loadout <command> --help` for detailed usage.
 
 ## Compatibility
 
-The install script symlinks into all paths that OpenCode and Claude
-Code scan:
+The install command symlinks into all paths that OpenCode, Claude Code,
+and Codex scan:
 
 | Path | Scope | Tool |
 |------|-------|------|
-| `~/.claude/skills/` | Global | Both |
+| `~/.claude/skills/` | Global | Claude Code |
 | `~/.config/opencode/skills/` | Global | OpenCode |
-| `~/.agents/skills/` | Global | Both |
-| `.claude/skills/` | Project | Both |
+| `~/.agents/skills/` | Global | Codex and compatible tools |
+| `.claude/skills/` | Project | Claude Code |
 | `.opencode/skills/` | Project | OpenCode |
-| `.agents/skills/` | Project | Both |
+| `.agents/skills/` | Project | Codex and compatible tools |
 
 Claude Code frontmatter extensions (`disable-model-invocation`,
 `context`, `allowed-tools`) are silently ignored by OpenCode.
+Codex-specific frontmatter keys are also allowed and passed through by
+loadout.
 
 ## SKILL.md format
 

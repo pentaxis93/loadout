@@ -264,6 +264,22 @@ mod tests {
     }
 
     #[test]
+    fn should_install_project_skills_into_agents_directory() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        create_test_skills(&temp);
+        let config = create_test_config(&temp);
+
+        // When
+        install(&config, false).unwrap();
+
+        // Then
+        let project_target = temp.path().join("project/.agents/skills");
+        assert!(project_target.join("test-skill").exists()); // inherited
+        assert!(project_target.join("another-skill").exists()); // project-specific
+    }
+
+    #[test]
     fn should_not_create_symlinks_in_dry_run_mode() {
         // Given
         let temp = TempDir::new().unwrap();

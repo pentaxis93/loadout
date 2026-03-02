@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/pentaxis93/loadout/schema/skill-frontmatter.json",
   "title": "SKILL.md Frontmatter",
-  "description": "Validates YAML frontmatter in SKILL.md files. Union of OpenCode and Claude Code fields.",
+  "description": "Validates YAML frontmatter in SKILL.md files. Union of OpenCode and Claude Code fields, with permissive passthrough for Codex and future tool keys.",
   "type": "object",
   "required": ["name", "description"],
   "properties": {
