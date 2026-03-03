@@ -89,7 +89,14 @@ OpenCode, Claude Code, and Codex discover skills from:
 | `.agents/skills/<name>/SKILL.md` | Project | Codex and compatible tools |
 | `~/.agents/skills/<name>/SKILL.md` | Global | Codex and compatible tools |
 
-The install script symlinks into the appropriate target paths.
+loadout maps runner aliases to these paths via `[target_aliases]`.
+Built-in aliases are `claude_code`, `opencode`, and `codex`; users can
+override built-ins and add custom aliases.
+
+`[global].targets` and `projects.<path>.targets` select aliases instead
+of raw paths.
+
+The install command symlinks into the appropriate target paths.
 Claude Code extensions in frontmatter (`disable-model-invocation`,
 `context`, `allowed-tools`) are ignored by OpenCode (unknown fields
 are silently skipped).

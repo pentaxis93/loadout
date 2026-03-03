@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Configurable runner target aliases via `[target_aliases]`, including support for custom aliases
+- Per-project `targets` alias selection (`projects.<path>.targets`) with subset and empty-list support
+
+### Changed
+- Canonical runner aliases are now `claude_code`, `opencode`, and `codex`
+- `global.targets` now selects target aliases instead of raw filesystem paths
+- `install`, `clean`, and `check` resolve global/project targets through alias mapping
+- Project target defaults now inherit the alias set from `[global].targets` when `projects.<path>.targets` is omitted
+
 ## [0.3.6] — 2026-03-03
 
 ### Changed

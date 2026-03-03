@@ -291,7 +291,7 @@ fn check_missing_frontmatter(all_skills: &[Skill]) -> Vec<Finding> {
 
 fn check_broken_symlinks(config: &Config) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
-    let all_targets = all_check_targets(config);
+    let all_targets = all_check_targets(config)?;
 
     for target in &all_targets {
         if !target.exists() {
@@ -321,7 +321,7 @@ fn check_broken_symlinks(config: &Config) -> Result<Vec<Finding>> {
 
 fn check_unmanaged_conflicts(config: &Config) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
-    let all_targets = all_check_targets(config);
+    let all_targets = all_check_targets(config)?;
 
     for target in &all_targets {
         if !target.exists() {
@@ -357,12 +357,16 @@ fn check_unmanaged_conflicts(config: &Config) -> Result<Vec<Finding>> {
     Ok(findings)
 }
 
-fn all_check_targets(config: &Config) -> Vec<PathBuf> {
-    let mut all_targets = config.global.targets.clone();
-    for project_path in config.projects.keys() {
-        all_targets.extend(paths::project_targets(project_path));
+fn all_check_targets(config: &Config) -> Result<Vec<PathBuf>> {
+    let mut all_targets = paths::global_targets(config)?;
+    for (project_path, project_config) in &config.projects {
+        all_targets.extend(paths::project_targets(
+            config,
+            project_path,
+            project_config,
+        )?);
     }
-    all_targets
+    Ok(all_targets)
 }
 
 fn check_placeholder_descriptions(all_skills: &[Skill]) -> Vec<Finding> {
@@ -602,6 +606,7 @@ pub fn exit_code(findings: &[Finding]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{default_target_aliases, TargetAliasPaths};
     use std::fs;
     use std::path::Path;
     use tempfile::TempDir;
@@ -644,21 +649,32 @@ mod tests {
     }
 
     fn test_config_with_project(temp: &TempDir) -> Config {
+        let mut target_aliases = default_target_aliases();
+        target_aliases.insert(
+            "test_runner".to_string(),
+            TargetAliasPaths {
+                global: temp.path().join("global-target"),
+                project: PathBuf::from(".test-runner/skills"),
+            },
+        );
+
         let mut projects = HashMap::new();
         projects.insert(
             temp.path().join("project"),
             crate::config::Project {
                 skills: vec![],
                 inherit: true,
+                targets: None,
             },
         );
 
         Config {
             sources: crate::config::Sources { skills: vec![] },
             global: crate::config::Global {
-                targets: vec![temp.path().join("global-target")],
+                targets: vec!["test_runner".to_string()],
                 skills: vec![],
             },
+            target_aliases,
             projects,
             check: Default::default(),
         }
@@ -700,6 +716,7 @@ mod tests {
                 targets: vec![],
                 skills: vec!["skill-a".to_string()],
             },
+            target_aliases: default_target_aliases(),
             projects: HashMap::new(),
             check: Default::default(),
         };
@@ -720,14 +737,14 @@ mod tests {
     }
 
     #[test]
-    fn should_detect_broken_symlink_in_agents_project_directory() {
+    fn should_detect_broken_symlink_in_project_target_directory() {
         // Given
         let temp = TempDir::new().unwrap();
         let config = test_config_with_project(&temp);
-        let agents_target = temp.path().join("project/.agents/skills");
+        let project_target = temp.path().join("project/.test-runner/skills");
         let missing_target = temp.path().join("missing-target");
-        let broken_link = agents_target.join("broken-skill");
-        fs::create_dir_all(&agents_target).unwrap();
+        let broken_link = project_target.join("broken-skill");
+        fs::create_dir_all(&project_target).unwrap();
         create_symlink(&missing_target, &broken_link);
 
         // When
@@ -740,16 +757,16 @@ mod tests {
             .path
             .as_ref()
             .unwrap()
-            .ends_with("project/.agents/skills/broken-skill"));
+            .ends_with("project/.test-runner/skills/broken-skill"));
     }
 
     #[test]
-    fn should_detect_unmanaged_directory_in_agents_project_directory() {
+    fn should_detect_unmanaged_directory_in_project_target_directory() {
         // Given
         let temp = TempDir::new().unwrap();
         let config = test_config_with_project(&temp);
-        let agents_target = temp.path().join("project/.agents/skills");
-        let unmanaged_dir = agents_target.join("manual-skill");
+        let project_target = temp.path().join("project/.test-runner/skills");
+        let unmanaged_dir = project_target.join("manual-skill");
         fs::create_dir_all(&unmanaged_dir).unwrap();
         fs::write(unmanaged_dir.join("SKILL.md"), "manual").unwrap();
 
@@ -763,7 +780,7 @@ mod tests {
             .path
             .as_ref()
             .unwrap()
-            .ends_with("project/.agents/skills/manual-skill"));
+            .ends_with("project/.test-runner/skills/manual-skill"));
     }
 
     #[test]

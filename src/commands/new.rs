@@ -125,7 +125,7 @@ fn validate_skill_name(name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Global, Sources};
+    use crate::config::{default_target_aliases, Global, Sources};
     use std::collections::HashMap;
     use tempfile::TempDir;
 
@@ -138,6 +138,7 @@ mod tests {
                 targets: vec![],
                 skills: vec![],
             },
+            target_aliases: default_target_aliases(),
             projects: HashMap::new(),
             check: Default::default(),
         }

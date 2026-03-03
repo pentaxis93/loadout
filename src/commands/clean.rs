@@ -18,9 +18,9 @@ pub fn clean(config: &Config, dry_run: bool) -> Result<()> {
 
     // Clean global targets
     println!("{}", "--- Global scope ---".cyan().bold());
-    for target in &config.global.targets {
+    for target in paths::global_targets(config)? {
         if dry_run {
-            if linker::is_managed(target) {
+            if linker::is_managed(&target) {
                 println!(
                     "  {} would clean: {}",
                     "[dry-run]".yellow(),
@@ -28,7 +28,7 @@ pub fn clean(config: &Config, dry_run: bool) -> Result<()> {
                 );
             }
         } else {
-            let removed = linker::clean_target(target)?;
+            let removed = linker::clean_target(&target)?;
             if !removed.is_empty() {
                 println!(
                     "  {} {} (removed {} symlinks)",
@@ -42,7 +42,7 @@ pub fn clean(config: &Config, dry_run: bool) -> Result<()> {
     }
 
     // Clean project targets
-    for project_path in config.projects.keys() {
+    for (project_path, project_config) in &config.projects {
         println!();
         println!(
             "{} {}",
@@ -50,7 +50,7 @@ pub fn clean(config: &Config, dry_run: bool) -> Result<()> {
             project_path.display()
         );
 
-        for target in paths::project_targets(project_path) {
+        for target in paths::project_targets(config, project_path, project_config)? {
             if dry_run {
                 if linker::is_managed(&target) {
                     println!(
@@ -89,7 +89,7 @@ pub fn clean(config: &Config, dry_run: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Global, Project, Sources};
+    use crate::config::{default_target_aliases, Global, Project, Sources};
     use std::collections::HashMap;
     use std::fs;
     use tempfile::TempDir;
@@ -99,14 +99,24 @@ mod tests {
         let global_target = temp.path().join("global");
         let project_path = temp.path().join("project");
 
+        let mut target_aliases = default_target_aliases();
+        target_aliases.insert(
+            "test_runner".to_string(),
+            crate::config::TargetAliasPaths {
+                global: global_target,
+                project: std::path::PathBuf::from(".test-runner/skills"),
+            },
+        );
+
         Config {
             sources: Sources {
                 skills: vec![skill_source],
             },
             global: Global {
-                targets: vec![global_target],
+                targets: vec!["test_runner".to_string()],
                 skills: vec![],
             },
+            target_aliases,
             projects: {
                 let mut projects = HashMap::new();
                 projects.insert(
@@ -114,6 +124,7 @@ mod tests {
                     Project {
                         skills: vec![],
                         inherit: false,
+                        targets: None,
                     },
                 );
                 projects
@@ -152,7 +163,7 @@ mod tests {
         // Given
         let temp = TempDir::new().unwrap();
         let config = create_test_config(&temp);
-        let project_target = temp.path().join("project/.claude/skills");
+        let project_target = temp.path().join("project/.test-runner/skills");
 
         create_managed_target(&project_target, "test-skill");
 
@@ -165,10 +176,12 @@ mod tests {
     }
 
     #[test]
-    fn should_clean_agents_project_targets() {
+    fn should_clean_codex_project_targets() {
         // Given
         let temp = TempDir::new().unwrap();
-        let config = create_test_config(&temp);
+        let mut config = create_test_config(&temp);
+        let project_path = temp.path().join("project");
+        config.projects.get_mut(&project_path).unwrap().targets = Some(vec!["codex".to_string()]);
         let project_target = temp.path().join("project/.agents/skills");
 
         create_managed_target(&project_target, "test-skill");
@@ -179,6 +192,27 @@ mod tests {
         // Then
         assert!(!project_target.join("test-skill").exists());
         assert!(!linker::is_managed(&project_target));
+    }
+
+    #[test]
+    fn should_clean_only_selected_project_targets() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let mut config = create_test_config(&temp);
+        let project_path = temp.path().join("project");
+        config.projects.get_mut(&project_path).unwrap().targets = Some(vec!["codex".to_string()]);
+
+        let codex_target = temp.path().join("project/.agents/skills");
+        let claude_target = temp.path().join("project/.claude/skills");
+        create_managed_target(&codex_target, "test-skill");
+        create_managed_target(&claude_target, "test-skill");
+
+        // When
+        clean(&config, false).unwrap();
+
+        // Then
+        assert!(!codex_target.join("test-skill").exists());
+        assert!(claude_target.join("test-skill").exists());
     }
 
     #[test]

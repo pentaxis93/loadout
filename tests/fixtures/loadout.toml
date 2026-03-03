@@ -7,7 +7,7 @@ skills = [
 
 [global]
 targets = [
-  "targets/global",
+  "claude_code",
 ]
 
 skills = [

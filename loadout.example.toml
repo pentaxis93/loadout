@@ -15,14 +15,42 @@ skills = [
   # "/path/to/shared-skills/skills",  # team/org skills
 ]
 
+# ─── Target aliases ──────────────────────────────────────────────────────
+# Runner app aliases and their global/project discovery paths.
+#
+# Built-in aliases:
+# - claude_code
+# - opencode
+# - codex
+#
+# You can override built-ins and add new aliases.
+
+[target_aliases.claude_code]
+global = "~/.claude/skills"
+project = ".claude/skills"
+
+[target_aliases.opencode]
+global = "~/.config/opencode/skills"
+project = ".opencode/skills"
+
+[target_aliases.codex]
+global = "~/.agents/skills"
+project = ".agents/skills"
+
+# Custom runner example:
+# [target_aliases.my_runner]
+# global = "~/.my-runner/skills"
+# project = ".my-runner/skills"
+
 # ─── Global scope ───────────────────────────────────────────────────────
-# Skills symlinked to global discovery paths (available in all projects).
+# Skills symlinked to global discovery paths.
 
 [global]
 targets = [
-  "~/.claude/skills",
-  "~/.config/opencode/skills",
-  "~/.agents/skills",           # Codex + compatible tools
+  "claude_code",
+  "opencode",
+  "codex",
+  # "my_runner",
 ]
 
 # List skill names to enable globally.
@@ -33,7 +61,13 @@ skills = [
 # ─── Project overrides ──────────────────────────────────────────────────
 # Per-project skill sets. Each key is a path to a project root.
 # Project skills are additive with global skills unless inherit = false.
+#
+# targets behavior:
+# - omitted: uses [global].targets
+# - []: disables project target management for this project
+# - ["codex", "claude_code"]: scope to a subset
 
 # [projects."/home/user/my-project"]
 # skills = ["deploy-staging"]
-# inherit = true  # default: true — also include global skills
+# inherit = true                     # default: true — include global skills
+# targets = ["claude_code", "codex"]
