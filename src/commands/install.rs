@@ -52,11 +52,11 @@ fn install_global_skills(
 ) -> Result<()> {
     println!("{}", "--- Global scope ---".cyan().bold());
 
-    for target in &config.global.targets {
+    for target in paths::global_targets(config)? {
         println!("Target: {}", target.display());
 
         for skill_name in &config.global.skills {
-            install_skill(skill_name, skill_map, target, dry_run)?;
+            install_skill(skill_name, skill_map, &target, dry_run)?;
         }
     }
 
@@ -77,7 +77,7 @@ fn install_project_skills(
             project_path.display()
         );
 
-        for target in paths::project_targets(project_path) {
+        for target in paths::project_targets(config, project_path, project_config)? {
             println!("Target: {}", target.display());
 
             // Link global skills if inherit is true
@@ -137,7 +137,7 @@ fn install_skill(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Global, Project, Sources};
+    use crate::config::{default_target_aliases, Global, Project, Sources};
     use std::fs;
     use tempfile::TempDir;
 
@@ -146,14 +146,24 @@ mod tests {
         let global_target = temp.path().join("global");
         let project_path = temp.path().join("project");
 
+        let mut target_aliases = default_target_aliases();
+        target_aliases.insert(
+            "test_runner".to_string(),
+            crate::config::TargetAliasPaths {
+                global: global_target,
+                project: std::path::PathBuf::from(".test-runner/skills"),
+            },
+        );
+
         Config {
             sources: Sources {
                 skills: vec![skill_source],
             },
             global: Global {
-                targets: vec![global_target],
+                targets: vec!["test_runner".to_string()],
                 skills: vec!["test-skill".to_string()],
             },
+            target_aliases,
             projects: {
                 let mut projects = HashMap::new();
                 projects.insert(
@@ -161,6 +171,7 @@ mod tests {
                     Project {
                         skills: vec!["another-skill".to_string()],
                         inherit: true,
+                        targets: None,
                     },
                 );
                 projects
@@ -218,7 +229,7 @@ mod tests {
         install(&config, false).unwrap();
 
         // Then
-        let project_target = temp.path().join("project/.claude/skills");
+        let project_target = temp.path().join("project/.test-runner/skills");
         assert!(project_target.join("test-skill").exists()); // inherited
         assert!(project_target.join("another-skill").exists()); // project-specific
     }
@@ -238,7 +249,7 @@ mod tests {
         install(&config, false).unwrap();
 
         // Then
-        let project_target = temp.path().join("project/.claude/skills");
+        let project_target = temp.path().join("project/.test-runner/skills");
         assert!(!project_target.join("test-skill").exists()); // NOT inherited
         assert!(project_target.join("another-skill").exists()); // project-specific
     }
@@ -254,18 +265,22 @@ mod tests {
         install(&config, false).unwrap();
 
         // Then
-        for target in paths::project_targets(&temp.path().join("project")) {
+        let project_path = temp.path().join("project");
+        let project = config.projects.get(&project_path).unwrap();
+        for target in paths::project_targets(&config, &project_path, project).unwrap() {
             assert!(target.join("test-skill").exists());
             assert!(target.join("another-skill").exists());
         }
     }
 
     #[test]
-    fn should_install_project_skills_into_agents_directory() {
+    fn should_install_project_skills_into_codex_directory() {
         // Given
         let temp = TempDir::new().unwrap();
         create_test_skills(&temp);
-        let config = create_test_config(&temp);
+        let mut config = create_test_config(&temp);
+        let project_path = temp.path().join("project");
+        config.projects.get_mut(&project_path).unwrap().targets = Some(vec!["codex".to_string()]);
 
         // When
         install(&config, false).unwrap();
@@ -274,6 +289,34 @@ mod tests {
         let project_target = temp.path().join("project/.agents/skills");
         assert!(project_target.join("test-skill").exists()); // inherited
         assert!(project_target.join("another-skill").exists()); // project-specific
+    }
+
+    #[test]
+    fn should_install_project_skills_to_selected_targets() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        create_test_skills(&temp);
+        let mut config = create_test_config(&temp);
+        let project_path = temp.path().join("project");
+        config.projects.get_mut(&project_path).unwrap().targets =
+            Some(vec!["codex".to_string(), "claude_code".to_string()]);
+
+        // When
+        install(&config, false).unwrap();
+
+        // Then
+        assert!(temp
+            .path()
+            .join("project/.agents/skills/test-skill")
+            .exists());
+        assert!(temp
+            .path()
+            .join("project/.claude/skills/test-skill")
+            .exists());
+        assert!(!temp
+            .path()
+            .join("project/.opencode/skills/test-skill")
+            .exists());
     }
 
     #[test]
@@ -333,7 +376,7 @@ mod tests {
 skills = ["skills"]
 
 [global]
-targets = []
+targets = ["codex", "claude_code", "opencode"]
 skills = []
 
 [projects."."]

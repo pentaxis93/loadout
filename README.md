@@ -60,8 +60,10 @@ loadout install
 Override the config path with `$LOADOUT_CONFIG` or `$XDG_CONFIG_HOME`.
 If `XDG_CONFIG_HOME` is set, loadout resolves config at
 `$XDG_CONFIG_HOME/loadout/loadout.toml`.
-Relative paths in `sources`, `global.targets`, and `[projects."..."]`
-are resolved relative to the directory containing `loadout.toml`.
+Relative paths in `sources` and `target_aliases.<name>.global` are
+resolved relative to the directory containing `loadout.toml`.
+Relative `target_aliases.<name>.project` paths are resolved relative to
+each project root.
 
 ```bash
 # Use an alternate config
@@ -78,22 +80,35 @@ skills = [
   # "/path/to/team-skills/skills",    # shared/team skills
 ]
 
+[target_aliases.claude_code]
+global = "~/.claude/skills"
+project = ".claude/skills"
+
+[target_aliases.opencode]
+global = "~/.config/opencode/skills"
+project = ".opencode/skills"
+
+[target_aliases.codex]
+global = "~/.agents/skills"
+project = ".agents/skills"
+
 [global]
-targets = [
-  "~/.claude/skills",
-  "~/.config/opencode/skills",
-  "~/.agents/skills",
-]
+targets = ["claude_code", "opencode", "codex"]
 skills = ["git-commit", "code-review"]
 
 [projects."/home/user/my-app"]
 skills = ["deploy-staging"]
 inherit = true  # also include global skills (default)
+targets = ["claude_code", "codex"] # optional project override
 ```
 
 **Sources** are directories containing skill folders. Listed in priority
 order — first match wins for duplicate names. This lets you layer team
 skills under personal overrides.
+
+`target_aliases` defines runner app aliases and their discovery paths.
+Built-ins are `claude_code`, `opencode`, and `codex`; you can override
+them and add custom aliases.
 
 ### Check suppression
 
@@ -149,7 +164,7 @@ Use `loadout --help` or `loadout <command> --help` for detailed usage.
 ## Compatibility
 
 The install command symlinks into all paths that OpenCode, Claude Code,
-and Codex scan:
+and Codex scan through alias mapping:
 
 | Path | Scope | Tool |
 |------|-------|------|
@@ -159,6 +174,11 @@ and Codex scan:
 | `.claude/skills/` | Project | Claude Code |
 | `.opencode/skills/` | Project | OpenCode |
 | `.agents/skills/` | Project | Codex and compatible tools |
+
+`[global].targets` and `projects.<path>.targets` select aliases, not
+paths. If project `targets` is omitted, it uses `[global].targets`. If
+project `targets = []`, project target management is disabled for that
+project.
 
 Claude Code frontmatter extensions (`disable-model-invocation`,
 `context`, `allowed-tools`) are silently ignored by OpenCode.

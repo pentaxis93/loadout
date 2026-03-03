@@ -2,7 +2,9 @@
 
 mod types;
 
-pub use types::{Config, Global, Project, Sources};
+pub use types::{
+    default_target_aliases, CheckConfig, Config, Global, Project, Sources, TargetAliasPaths,
+};
 
 use std::env;
 use std::fs;
@@ -29,6 +31,8 @@ pub fn load_from(path: &Path) -> Result<Config> {
     let mut config: Config = toml::from_str(&contents)
         .context(format!("Failed to parse config file: {}", path.display()))?;
 
+    merge_default_target_aliases(&mut config);
+
     let config_dir = path.parent().context(format!(
         "Config file has no parent directory: {}",
         path.display()
@@ -41,8 +45,11 @@ pub fn load_from(path: &Path) -> Result<Config> {
             .join(config_dir)
     };
 
-    // Expand ~ in all path fields
+    // Expand path fields
     expand_paths(&mut config, &config_dir)?;
+
+    // Validate aliases and references after expansion.
+    validate_aliases(&config)?;
 
     Ok(config)
 }
@@ -98,16 +105,19 @@ fn expand_tilde_with_home(path: &str, home: Option<&str>) -> Result<PathBuf> {
     }
 }
 
-/// Expand ~ in all path fields within the config
+/// Expand path fields within the config.
 fn expand_paths(config: &mut Config, config_dir: &Path) -> Result<()> {
     // Expand source paths
     for source in &mut config.sources.skills {
         *source = expand_config_path(source, config_dir, "sources.skills")?;
     }
 
-    // Expand global target paths
-    for target in &mut config.global.targets {
-        *target = expand_config_path(target, config_dir, "global.targets")?;
+    // Expand target alias paths
+    for (alias, paths) in &mut config.target_aliases {
+        let global_field = format!("target_aliases.{alias}.global");
+        let project_field = format!("target_aliases.{alias}.project");
+        paths.global = expand_config_path(&paths.global, config_dir, &global_field)?;
+        paths.project = expand_tilde_path(&paths.project, &project_field)?;
     }
 
     // Expand project paths (keys)
@@ -136,9 +146,66 @@ fn expand_config_path(path: &Path, config_dir: &Path, field_name: &str) -> Resul
     }
 }
 
+fn expand_tilde_path(path: &Path, field_name: &str) -> Result<PathBuf> {
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| anyhow!("{field_name} contains non-UTF-8 path"))?;
+    expand_tilde(path_str)
+}
+
+fn merge_default_target_aliases(config: &mut Config) {
+    for (alias, paths) in default_target_aliases() {
+        config.target_aliases.entry(alias).or_insert(paths);
+    }
+}
+
+fn validate_aliases(config: &Config) -> Result<()> {
+    for alias in config.target_aliases.keys() {
+        if !is_valid_alias_name(alias) {
+            anyhow::bail!("Invalid target alias '{alias}'. Alias names must match ^[a-z0-9_]+$");
+        }
+    }
+
+    for alias in &config.global.targets {
+        ensure_alias_exists(config, alias, "global.targets")?;
+    }
+
+    for (project_path, project) in &config.projects {
+        if let Some(targets) = &project.targets {
+            for alias in targets {
+                ensure_alias_exists(
+                    config,
+                    alias,
+                    &format!("projects.\"{}\".targets", project_path.display()),
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_alias_exists(config: &Config, alias: &str, field_name: &str) -> Result<()> {
+    if config.target_aliases.contains_key(alias) {
+        return Ok(());
+    }
+
+    anyhow::bail!(
+        "Unknown target alias '{alias}' in {field_name}. Define it under [target_aliases.{alias}]"
+    )
+}
+
+fn is_valid_alias_name(alias: &str) -> bool {
+    !alias.is_empty()
+        && alias
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::env;
 
     #[test]
@@ -246,11 +313,15 @@ mod tests {
             skills = ["~/.config/loadout/skills", "/opt/skills"]
 
             [global]
-            targets = ["~/.claude/skills"]
+            targets = ["claude_code"]
             skills = []
 
             [projects."~/my-project"]
             skills = []
+
+            [target_aliases.claude_code]
+            global = "~/.claude/skills"
+            project = ".claude/skills"
         "#;
 
         // When
@@ -264,8 +335,12 @@ mod tests {
         );
         assert_eq!(config.sources.skills[1], PathBuf::from("/opt/skills"));
         assert_eq!(
-            config.global.targets[0],
+            config.target_aliases["claude_code"].global,
             PathBuf::from(&home).join(".claude/skills")
+        );
+        assert_eq!(
+            config.target_aliases["claude_code"].project,
+            PathBuf::from(".claude/skills")
         );
         assert!(config
             .projects
@@ -288,18 +363,22 @@ mod tests {
     }
 
     #[test]
-    fn should_resolve_relative_paths_against_config_directory() {
+    fn should_resolve_relative_global_alias_paths_against_config_directory() {
         // Given
         let toml = r#"
             [sources]
             skills = ["skills"]
 
             [global]
-            targets = ["targets/global"]
+            targets = ["custom"]
             skills = []
 
             [projects."."]
             skills = []
+
+            [target_aliases.custom]
+            global = "targets/global"
+            project = "targets/project"
         "#;
         let mut config: Config = toml::from_str(toml).unwrap();
         let config_dir = PathBuf::from("/tmp/loadout-config");
@@ -309,8 +388,115 @@ mod tests {
 
         // Then
         assert_eq!(config.sources.skills[0], config_dir.join("skills"));
-        assert_eq!(config.global.targets[0], config_dir.join("targets/global"));
+        assert_eq!(
+            config.target_aliases["custom"].global,
+            config_dir.join("targets/global")
+        );
+        assert_eq!(
+            config.target_aliases["custom"].project,
+            PathBuf::from("targets/project")
+        );
         assert!(config.projects.contains_key(&config_dir));
+    }
+
+    #[test]
+    fn should_return_error_for_unknown_global_target_alias() {
+        // Given
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(
+            temp_file,
+            r#"
+[sources]
+skills = []
+
+[global]
+targets = ["missing_alias"]
+skills = []
+"#
+        )
+        .unwrap();
+
+        // When
+        let result = load_from(temp_file.path());
+
+        // Then
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unknown target alias 'missing_alias'"));
+    }
+
+    #[test]
+    fn should_return_error_for_invalid_alias_name() {
+        // Given
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(
+            temp_file,
+            r#"
+[sources]
+skills = []
+
+[global]
+targets = ["bad-alias"]
+skills = []
+
+[target_aliases."bad-alias"]
+global = "~/.bad/skills"
+project = ".bad/skills"
+"#
+        )
+        .unwrap();
+
+        // When
+        let result = load_from(temp_file.path());
+
+        // Then
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid target alias"));
+    }
+
+    #[test]
+    fn should_merge_builtin_aliases_when_custom_aliases_defined() {
+        // Given
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(
+            temp_file,
+            r#"
+[sources]
+skills = []
+
+[global]
+targets = ["my_runner", "codex"]
+skills = []
+
+[target_aliases.my_runner]
+global = "~/.my-runner/skills"
+project = ".my-runner/skills"
+"#
+        )
+        .unwrap();
+
+        // When
+        let config = load_from(temp_file.path()).unwrap();
+
+        // Then
+        assert!(config.target_aliases.contains_key("my_runner"));
+        assert!(config.target_aliases.contains_key("claude_code"));
+        assert!(config.target_aliases.contains_key("opencode"));
+        assert!(config.target_aliases.contains_key("codex"));
     }
 
     #[test]
@@ -334,7 +520,7 @@ mod tests {
         use tempfile::NamedTempFile;
 
         let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "invalid toml content [[[").unwrap();
+        writeln!(temp_file, "invalid toml content [[[ ").unwrap();
         let path = temp_file.path();
 
         // When
@@ -360,9 +546,16 @@ mod tests {
                 ]))],
             },
             global: Global {
-                targets: vec![],
+                targets: vec!["claude_code".to_string()],
                 skills: vec![],
             },
+            target_aliases: HashMap::from([(
+                "claude_code".to_string(),
+                TargetAliasPaths {
+                    global: PathBuf::from("~/.claude/skills"),
+                    project: PathBuf::from(".claude/skills"),
+                },
+            )]),
             projects: Default::default(),
             check: Default::default(),
         };
