@@ -365,12 +365,11 @@ Per docs/ROADMAP.md:
 - `thiserror` (1.0) — Typed library errors
 
 ### Optional Features
-- `tui` feature: `ratatui` (0.29), `crossterm` (0.28) — Phase 4
 - `graph` feature: `petgraph` (0.6) — Phase 3
 
 ## References
 
 - **DESIGN.md**: Architecture and rationale
-- **docs/ROADMAP.md**: 5-phase development plan
+- **docs/ROADMAP.md**: Development phases and release direction
 - **README.md**: User guide and quick start
 - **schema/skill-frontmatter.json**: Frontmatter validation schema

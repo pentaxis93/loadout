@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.6] — 2026-03-03
+
 ### Changed
 - Explicitly documented Codex support via `~/.agents/skills` and `.agents/skills` discovery paths
 - Clarified compatibility wording across README, design docs, example config, and agent guidance
@@ -15,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   directory containing `loadout.toml` instead of process CWD
 - `install` now writes portable project symlinks that resolve correctly from `.claude/skills`,
   `.opencode/skills`, and `.agents/skills` when source directories are configured relatively
+- Retired roadmap Phase 4 (TUI) and Phase 5 (Lifecycle Management) plans
+- Removed the unused `tui` feature and optional TUI dependencies (`ratatui`, `crossterm`)
 
 ### Added
 - Regression tests for project `.agents/skills` handling in `install`, `clean`, and `check` commands
@@ -80,6 +84,7 @@ Phase 1: Bash Scripts Implementation.
 - `DESIGN.md` documenting config format, skill structure, and
   resolution rules
 
-[Unreleased]: https://github.com/pentaxis93/loadout/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/pentaxis93/loadout/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/pentaxis93/loadout/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/pentaxis93/loadout/compare/v0.1.0...v0.3.5
 [0.1.0]: https://github.com/pentaxis93/loadout/releases/tag/v0.1.0

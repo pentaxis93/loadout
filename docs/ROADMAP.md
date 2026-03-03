@@ -9,8 +9,8 @@ For current architecture, see [DESIGN.md](../DESIGN.md).
 
 Loadout began as three bash scripts (`install.sh`, `validate.sh`, `new.sh`)
 that parse TOML with Python and manage symlinks. The roadmap covers the
-rewrite into a single compiled binary, then adds analysis, a TUI, and
-composition features in later phases.
+rewrite into a single compiled binary, then adds analysis and metadata
+capabilities for ongoing skill library maintenance.
 
 Each phase produces an independently useful tool. No phase depends on a
 later phase being complete.
@@ -21,8 +21,7 @@ later phase being complete.
 | 0.2.0 | [Phase 2 — Rust Parity](#phase-2--rust-parity) | Replace scripts with `loadout` binary (complete) |
 | 0.3.0 | [Phase 3 — Analysis & Intelligence](#phase-3--analysis--intelligence) | Cross-references, health checks, dependency graphs (complete) |
 | 0.3.5 | [Phase 3.5 — Metadata & Actionable Output](#phase-35--metadata--actionable-output) | Tags, pipelines, actionable diagnostics (complete) |
-| 0.4.0 | [Phase 4 — TUI](#phase-4--tui) | Interactive terminal interface |
-| 0.5.0 | [Phase 5 — Lifecycle Management](#phase-5--lifecycle-management) | Tag/pipeline management, templates, gap analysis |
+| 0.3.6 | Maintenance Release | Path-resolution fixes, roadmap simplification, and feature-surface cleanup |
 
 ## Source layout
 
@@ -49,11 +48,6 @@ src/
 │   └── mod.rs           # Symlink creation, marker management, cleanup
 ├── graph/
 │   └── mod.rs           # Dependency graph construction + analysis
-└── tui/                 # Phase 4, behind `tui` feature
-    ├── mod.rs           # Ratatui app loop
-    ├── skill_browser.rs # Browse/filter skills
-    ├── graph_view.rs    # Visual dependency graph
-    └── installer.rs     # Interactive install/toggle
 ```
 
 Design decisions:
@@ -61,8 +55,8 @@ Design decisions:
 - Each bash script becomes a subcommand (`loadout install`, not `loadout --install`).
 - `config`, `skill`, and `linker` are independent library modules. The CLI is
   a thin dispatch layer over them.
-- Feature gates (`tui`) keep optional dependencies out of the default binary.
-  The `graph` feature is enabled by default.
+- The `graph` feature is enabled by default and keeps graph-specific
+  dependencies optional.
 - `thiserror` for typed library errors, `anyhow` for CLI-level propagation.
 
 ---
@@ -199,7 +193,7 @@ Additional analysis:
 **Status: Complete**
 
 Extended the skill format with metadata fields and made all analysis
-commands produce actionable output. Pulled forward from Phase 5 because
+commands produce actionable output. Pulled forward from earlier roadmap drafts because
 tags and workflow ordering proved essential for meaningful analysis.
 
 ### 3.5a. Tags
@@ -274,112 +268,12 @@ ignore = ["dangling:skill-format:related-skill"]
 
 ---
 
-## Phase 4 — TUI
-
-**Status: Future**
-
-Interactive terminal interface using ratatui. Behind the `tui` feature flag.
-
-### Views
-
-**Skill Browser**
-- Filterable list of all skills with status indicators (installed, orphaned,
-  broken)
-- Preview pane showing description + frontmatter
-- Toggle skills on/off per scope (global, per-project)
-- Search/filter by name, description, tag, pipeline
-
-**Graph View**
-- Box-drawing dependency graph
-- Navigate between connected skills
-- Highlight clusters with color
-- Show dangling references in red
-
-**Install Dashboard**
-- Current state of all target directories
-- One-key install, clean, reinstall
-- Diff view: what would change on next install
-
-**Health Panel**
-- Live results from `check` analysis
-- Navigate directly to problem skills
-
-### Interaction model
-
-- Vim-style navigation (hjkl, /, ?)
-- Tab to switch panels
-- Enter to drill into skill detail
-- Space to toggle selection
-- `i` to install, `c` to clean
-- `q` to quit
-
-### Acceptance criteria
-
-- [ ] TUI launches with `loadout tui`
-- [ ] All four views are navigable
-- [ ] Install/clean operations work from within TUI
-- [ ] Binary without `tui` feature has no ratatui/crossterm dependency
-
----
-
-## Phase 5 — Lifecycle Management
-
-**Status: Future**
-
-Features that help the skill system itself evolve over time. The focus
-shifts from analysis (reading) to management (writing).
-
-### 5a. Tag and pipeline management
-
-Mutation commands for metadata that currently requires hand-editing SKILL.md
-frontmatter:
-
-| Command | Effect |
-|---------|--------|
-| `loadout tag rename <old> <new>` | Rename a tag across all skills |
-| `loadout list --untagged` | Show skills with no tags |
-| `loadout list --unpipelined` | Show skills not in any pipeline |
-| `loadout pipeline add <skill> <pipeline>` | Add a skill to a pipeline |
-| `loadout pipeline remove <skill> <pipeline>` | Remove a skill from a pipeline |
-
-The hard problem is frontmatter rewriting — modifying YAML inside a markdown
-file without mangling the surrounding content. This likely requires a
-roundtrip-safe YAML approach rather than full parse-and-serialize.
-
-### 5b. Skill templates
-
-Extend `loadout new` with `--from <template>`:
-
-- `loadout new my-skill --from minimal` — frontmatter + heading only
-- `loadout new my-skill --from full` — all standard sections (current default)
-- `loadout new my-skill --from <existing-skill>` — copy structure from
-  another skill
-
-### 5c. Gap analysis
-
-`loadout gaps` — combines graph analysis with cross-reference data to report:
-
-- Skills referenced but not present (create candidates)
-- Clusters with single points of failure (bridge nodes at risk)
-- Skills with no references in or out (isolated — still useful?)
-- Pipelines with missing stages (order gaps)
-
-### Acceptance criteria
-
-- [ ] Tag rename updates all SKILL.md files without corrupting content
-- [ ] Pipeline add/remove correctly modifies frontmatter YAML
-- [ ] Templates produce valid skills that pass `loadout validate`
-- [ ] Gap analysis identifies referenced-but-missing skills as creation
-      candidates
-
----
-
 ## Open questions
 
 These are recorded for future consideration. None block current work.
 
-**Frontmatter rewriting.** Phase 5a requires modifying YAML inside markdown
-files. Options: regex-based surgery (fragile), roundtrip YAML parser
+**Frontmatter rewriting.** Some future metadata mutation commands may require
+modifying YAML inside markdown files. Options: regex-based surgery (fragile), roundtrip YAML parser
 (complex), or a template-based approach that rewrites the entire frontmatter
 block. Worth prototyping before committing to an approach.
 
@@ -390,14 +284,14 @@ module design.
 
 **Remote sources.** Should `[sources].skills` eventually support git URLs
 for team/community skill sharing? Significant scope increase — probably a
-Phase 6 concern if it ever becomes one.
+future-phase concern if it ever becomes one.
 
 ## Resolved questions
 
 **Tags in frontmatter vs config.** Resolved: tags belong in SKILL.md
 frontmatter (portable with the skill). Delivered in Phase 3.5.
 
-**Chains vs pipelines.** The original Phase 5 proposed `[chains]` in
+**Chains vs pipelines.** Earlier roadmap drafts proposed `[chains]` in
 loadout.toml — named sequences of skills for common workflows. This was
 superseded by the `pipeline` frontmatter field, which is more expressive
 (stages, ordering, dependency cross-validation) and portable (travels with
