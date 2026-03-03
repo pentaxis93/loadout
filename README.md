@@ -132,7 +132,7 @@ annotated config.
 
 | Command | Purpose |
 |---------|---------|
-| `loadout install` | Link enabled skills into discovery paths |
+| `loadout install` | Reconcile managed links and link enabled skills into discovery paths |
 | `loadout install --dry-run` | Show what would happen without changes |
 | `loadout clean` | Remove all managed symlinks |
 | `loadout clean --dry-run` | Preview what would be cleaned |
