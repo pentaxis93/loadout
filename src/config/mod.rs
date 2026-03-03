@@ -8,13 +8,13 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 /// Load configuration from the standard location
 ///
 /// Resolution order:
 /// 1. $LOADOUT_CONFIG (if set)
-/// 2. $XDG_CONFIG_HOME/loadout/loadout.toml (if XDG_CONFIG_HOME set)
+/// 2. $XDG_CONFIG_HOME/loadout/loadout.toml (if set)
 /// 3. ~/.config/loadout/loadout.toml (default)
 pub fn load() -> Result<Config> {
     let path = resolve_config_path()?;
@@ -37,37 +37,45 @@ pub fn load_from(path: &Path) -> Result<Config> {
 
 /// Resolve the config file path using environment variables and XDG conventions
 fn resolve_config_path() -> Result<PathBuf> {
-    // 1. Check $LOADOUT_CONFIG
-    if let Ok(path) = env::var("LOADOUT_CONFIG") {
-        let expanded = expand_tilde(&path)?;
-        return Ok(expanded);
+    let loadout_config = env::var("LOADOUT_CONFIG").ok();
+    let xdg_home = env::var("XDG_CONFIG_HOME").ok();
+    let home = env::var("HOME").ok();
+
+    resolve_config_path_from_env(loadout_config.as_deref(), xdg_home.as_deref(), home.as_deref())
+}
+
+fn resolve_config_path_from_env(
+    loadout_config: Option<&str>,
+    xdg_home: Option<&str>,
+    home: Option<&str>,
+) -> Result<PathBuf> {
+    if let Some(path) = loadout_config {
+        return expand_tilde_with_home(path, home);
     }
 
-    // 2. Check $XDG_CONFIG_HOME/loadout/loadout.toml
-    if let Ok(xdg_home) = env::var("XDG_CONFIG_HOME") {
-        let path = PathBuf::from(xdg_home).join("loadout").join("loadout.toml");
-        if path.exists() {
-            return Ok(path);
-        }
+    if let Some(xdg_home) = xdg_home {
+        return Ok(PathBuf::from(xdg_home).join("loadout").join("loadout.toml"));
     }
 
-    // 3. Default to ~/.config/loadout/loadout.toml
-    let home = env::var("HOME").context("HOME environment variable not set")?;
-    let path = PathBuf::from(home)
+    let home = home.context("HOME environment variable not set")?;
+    Ok(PathBuf::from(home)
         .join(".config")
         .join("loadout")
-        .join("loadout.toml");
-
-    Ok(path)
+        .join("loadout.toml"))
 }
 
 /// Expand ~ and ~/ to $HOME in a path string
 fn expand_tilde(path: &str) -> Result<PathBuf> {
+    let home = env::var("HOME").ok();
+    expand_tilde_with_home(path, home.as_deref())
+}
+
+fn expand_tilde_with_home(path: &str, home: Option<&str>) -> Result<PathBuf> {
     if let Some(stripped) = path.strip_prefix("~/") {
-        let home = env::var("HOME").context("HOME environment variable not set")?;
+        let home = home.context("HOME environment variable not set")?;
         Ok(PathBuf::from(home).join(stripped))
     } else if path == "~" {
-        let home = env::var("HOME").context("HOME environment variable not set")?;
+        let home = home.context("HOME environment variable not set")?;
         Ok(PathBuf::from(home))
     } else {
         Ok(PathBuf::from(path))
@@ -78,27 +86,30 @@ fn expand_tilde(path: &str) -> Result<PathBuf> {
 fn expand_paths(config: &mut Config) -> Result<()> {
     // Expand source paths
     for source in &mut config.sources.skills {
-        if let Some(path_str) = source.to_str() {
-            *source = expand_tilde(path_str)?;
-        }
+        let path_str = source
+            .to_str()
+            .ok_or_else(|| anyhow!("sources.skills contains non-UTF-8 path"))?;
+        *source = expand_tilde(path_str)?;
     }
 
     // Expand global target paths
     for target in &mut config.global.targets {
-        if let Some(path_str) = target.to_str() {
-            *target = expand_tilde(path_str)?;
-        }
+        let path_str = target
+            .to_str()
+            .ok_or_else(|| anyhow!("global.targets contains non-UTF-8 path"))?;
+        *target = expand_tilde(path_str)?;
     }
 
     // Expand project paths (both keys and target paths if they exist)
     let project_keys: Vec<PathBuf> = config.projects.keys().cloned().collect();
     for old_key in project_keys {
-        if let Some(key_str) = old_key.to_str() {
-            let new_key = expand_tilde(key_str)?;
-            if new_key != old_key {
-                if let Some(project) = config.projects.remove(&old_key) {
-                    config.projects.insert(new_key, project);
-                }
+        let key_str = old_key
+            .to_str()
+            .ok_or_else(|| anyhow!("projects contains non-UTF-8 path key"))?;
+        let new_key = expand_tilde(key_str)?;
+        if new_key != old_key {
+            if let Some(project) = config.projects.remove(&old_key) {
+                config.projects.insert(new_key, project);
             }
         }
     }
@@ -145,6 +156,64 @@ mod tests {
 
         // Then
         assert_eq!(expanded, PathBuf::from(path));
+    }
+
+    #[test]
+    fn should_prefer_loadout_config_over_xdg_and_home() {
+        // Given
+        let home = "/home/test-user";
+
+        // When
+        let resolved = resolve_config_path_from_env(
+            Some("~/custom/loadout.toml"),
+            Some("/xdg/config"),
+            Some(home),
+        )
+        .unwrap();
+
+        // Then
+        assert_eq!(resolved, PathBuf::from(home).join("custom/loadout.toml"));
+    }
+
+    #[test]
+    fn should_use_xdg_path_when_set() {
+        // When
+        let resolved = resolve_config_path_from_env(None, Some("/xdg/config"), Some("/home/test"))
+            .unwrap();
+
+        // Then
+        assert_eq!(
+            resolved,
+            PathBuf::from("/xdg/config").join("loadout").join("loadout.toml")
+        );
+    }
+
+    #[test]
+    fn should_fallback_to_home_config_when_xdg_not_set() {
+        // When
+        let resolved = resolve_config_path_from_env(None, None, Some("/home/test")).unwrap();
+
+        // Then
+        assert_eq!(
+            resolved,
+            PathBuf::from("/home/test")
+                .join(".config")
+                .join("loadout")
+                .join("loadout.toml")
+        );
+    }
+
+    #[test]
+    fn should_return_error_when_home_is_missing_for_default_resolution() {
+        // When
+        let result = resolve_config_path_from_env(None, None, None);
+
+        // Then
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("HOME environment variable not set"));
     }
 
     #[test]
@@ -228,5 +297,34 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Failed to parse config file"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn should_return_error_when_config_contains_non_utf8_paths() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        // Given
+        let mut config = Config {
+            sources: Sources {
+                skills: vec![PathBuf::from(OsString::from_vec(vec![
+                    0x66, 0x6f, 0x80, 0x6f,
+                ]))],
+            },
+            global: Global {
+                targets: vec![],
+                skills: vec![],
+            },
+            projects: Default::default(),
+            check: Default::default(),
+        };
+
+        // When
+        let result = expand_paths(&mut config);
+
+        // Then
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("non-UTF-8 path"));
     }
 }

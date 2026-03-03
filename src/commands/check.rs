@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::config::Config;
+use crate::paths;
 use crate::skill::{self, Skill};
 
 const MARKER_FILE: &str = ".managed-by-loadout";
@@ -290,13 +291,7 @@ fn check_missing_frontmatter(all_skills: &[Skill]) -> Vec<Finding> {
 
 fn check_broken_symlinks(config: &Config) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
-
-    let mut all_targets = config.global.targets.clone();
-    for project_path in config.projects.keys() {
-        all_targets.push(project_path.join(".claude/skills"));
-        all_targets.push(project_path.join(".opencode/skills"));
-        all_targets.push(project_path.join(".agents/skills"));
-    }
+    let all_targets = all_check_targets(config);
 
     for target in &all_targets {
         if !target.exists() {
@@ -326,13 +321,7 @@ fn check_broken_symlinks(config: &Config) -> Result<Vec<Finding>> {
 
 fn check_unmanaged_conflicts(config: &Config) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
-
-    let mut all_targets = config.global.targets.clone();
-    for project_path in config.projects.keys() {
-        all_targets.push(project_path.join(".claude/skills"));
-        all_targets.push(project_path.join(".opencode/skills"));
-        all_targets.push(project_path.join(".agents/skills"));
-    }
+    let all_targets = all_check_targets(config);
 
     for target in &all_targets {
         if !target.exists() {
@@ -366,6 +355,14 @@ fn check_unmanaged_conflicts(config: &Config) -> Result<Vec<Finding>> {
     }
 
     Ok(findings)
+}
+
+fn all_check_targets(config: &Config) -> Vec<PathBuf> {
+    let mut all_targets = config.global.targets.clone();
+    for project_path in config.projects.keys() {
+        all_targets.extend(paths::project_targets(project_path));
+    }
+    all_targets
 }
 
 fn check_placeholder_descriptions(all_skills: &[Skill]) -> Vec<Finding> {
@@ -606,8 +603,18 @@ pub fn exit_code(findings: &[Finding]) -> i32 {
 mod tests {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::symlink;
+    use std::path::Path;
     use tempfile::TempDir;
+
+    #[cfg(unix)]
+    fn create_symlink(source: &Path, link_path: &Path) {
+        std::os::unix::fs::symlink(source, link_path).unwrap();
+    }
+
+    #[cfg(windows)]
+    fn create_symlink(source: &Path, link_path: &Path) {
+        std::os::windows::fs::symlink_dir(source, link_path).unwrap();
+    }
 
     // Helper to create a test skill
     fn test_skill(name: &str, description: &str) -> Skill {
@@ -718,12 +725,10 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let config = test_config_with_project(&temp);
         let agents_target = temp.path().join("project/.agents/skills");
+        let missing_target = temp.path().join("missing-target");
+        let broken_link = agents_target.join("broken-skill");
         fs::create_dir_all(&agents_target).unwrap();
-        symlink(
-            temp.path().join("missing-target"),
-            agents_target.join("broken-skill"),
-        )
-        .unwrap();
+        create_symlink(&missing_target, &broken_link);
 
         // When
         let findings = check_broken_symlinks(&config).unwrap();

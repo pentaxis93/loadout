@@ -3,7 +3,7 @@
 # Copy this file to ~/.config/loadout/loadout.toml and edit to taste.
 # Override the path with $LOADOUT_CONFIG.
 #
-# Run `install.sh` after editing to apply changes.
+# Run `loadout install` after editing to apply changes.
 
 # ─── Sources ─────────────────────────────────────────────────────────────
 # Directories containing skill folders (each with a SKILL.md).
