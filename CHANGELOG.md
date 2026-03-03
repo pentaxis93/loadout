@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-03-03
+
 ### Added
 - Configurable runner target aliases via `[target_aliases]`, including support for custom aliases
 - Per-project `targets` alias selection (`projects.<path>.targets`) with subset and empty-list support
@@ -16,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `global.targets` now selects target aliases instead of raw filesystem paths
 - `install`, `clean`, and `check` resolve global/project targets through alias mapping
 - Project target defaults now inherit the alias set from `[global].targets` when `projects.<path>.targets` is omitted
+
+### Migration
+- `global.targets` now expects alias names, not paths.
+- Built-in aliases are `claude_code`, `opencode`, and `codex`.
+- Convert this:
+  `targets = ["~/.claude/skills", "~/.config/opencode/skills", "~/.agents/skills"]`
+  to this:
+  `targets = ["claude_code", "opencode", "codex"]`
 
 ## [0.3.6] — 2026-03-03
 
@@ -94,7 +104,8 @@ Phase 1: Bash Scripts Implementation.
 - `DESIGN.md` documenting config format, skill structure, and
   resolution rules
 
-[Unreleased]: https://github.com/pentaxis93/loadout/compare/v0.3.6...HEAD
+[Unreleased]: https://github.com/pentaxis93/loadout/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pentaxis93/loadout/compare/v0.3.6...v0.4.0
 [0.3.6]: https://github.com/pentaxis93/loadout/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/pentaxis93/loadout/compare/v0.1.0...v0.3.5
 [0.1.0]: https://github.com/pentaxis93/loadout/releases/tag/v0.1.0
