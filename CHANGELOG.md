@@ -11,9 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Explicitly documented Codex support via `~/.agents/skills` and `.agents/skills` discovery paths
 - Clarified compatibility wording across README, design docs, example config, and agent guidance
 - Updated frontmatter schema/docs to note permissive passthrough for tool-specific keys (including Codex)
+- Normalized relative config paths (`sources`, `global.targets`, and project keys) against the
+  directory containing `loadout.toml` instead of process CWD
+- `install` now writes portable project symlinks that resolve correctly from `.claude/skills`,
+  `.opencode/skills`, and `.agents/skills` when source directories are configured relatively
 
 ### Added
 - Regression tests for project `.agents/skills` handling in `install`, `clean`, and `check` commands
+- Regression coverage for issue #39 (`[projects."."]` with `sources.skills = ["skills"]`) across
+  all project discovery targets
 
 ## [0.3.5] — 2026-02-12
 

@@ -310,4 +310,52 @@ mod tests {
         assert!(err.to_string().contains("not found"));
         assert!(err.to_string().contains("nonexistent"));
     }
+
+    #[test]
+    fn should_install_project_skill_from_relative_source_with_project_dot_key() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+
+        let demo_skill_dir = project_root.join("skills").join("demo");
+        fs::create_dir_all(&demo_skill_dir).unwrap();
+        fs::write(
+            demo_skill_dir.join("SKILL.md"),
+            "---\nname: demo\ndescription: Demo skill\n---\n",
+        )
+        .unwrap();
+
+        let config_path = project_root.join("loadout.toml");
+        fs::write(
+            &config_path,
+            r#"
+[sources]
+skills = ["skills"]
+
+[global]
+targets = []
+skills = []
+
+[projects."."]
+skills = ["demo"]
+inherit = false
+"#,
+        )
+        .unwrap();
+        let config = crate::config::load_from(&config_path).unwrap();
+
+        // When
+        install(&config, false).unwrap();
+
+        // Then
+        let expected = fs::canonicalize(project_root.join("skills/demo")).unwrap();
+        for link_path in [
+            project_root.join(".claude/skills/demo"),
+            project_root.join(".opencode/skills/demo"),
+            project_root.join(".agents/skills/demo"),
+        ] {
+            assert!(link_path.is_symlink());
+            assert_eq!(fs::canonicalize(link_path).unwrap(), expected);
+        }
+    }
 }

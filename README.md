@@ -60,6 +60,8 @@ loadout install
 Override the config path with `$LOADOUT_CONFIG` or `$XDG_CONFIG_HOME`.
 If `XDG_CONFIG_HOME` is set, loadout resolves config at
 `$XDG_CONFIG_HOME/loadout/loadout.toml`.
+Relative paths in `sources`, `global.targets`, and `[projects."..."]`
+are resolved relative to the directory containing `loadout.toml`.
 
 ```bash
 # Use an alternate config

@@ -2,12 +2,12 @@
 
 [sources]
 skills = [
-  "tests/fixtures/skills",
+  "skills",
 ]
 
 [global]
 targets = [
-  "tests/fixtures/targets/global",
+  "targets/global",
 ]
 
 skills = [

@@ -1,7 +1,7 @@
 //! Symlink creation, removal, and marker management
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result};
 use thiserror::Error;
@@ -31,6 +31,14 @@ pub fn link_skill(skill_name: &str, skill_path: &Path, target_dir: &Path) -> Res
         "Failed to create target directory: {}",
         target_dir.display()
     ))?;
+    let canonical_target_dir = fs::canonicalize(target_dir).context(format!(
+        "Failed to canonicalize target directory: {}",
+        target_dir.display()
+    ))?;
+    let canonical_skill_path = fs::canonicalize(skill_path).context(format!(
+        "Failed to canonicalize skill path: {}",
+        skill_path.display()
+    ))?;
 
     // Create marker file
     create_marker(target_dir)?;
@@ -44,9 +52,11 @@ pub fn link_skill(skill_name: &str, skill_path: &Path, target_dir: &Path) -> Res
         if link_path.is_symlink() {
             let current_target = fs::read_link(&link_path)
                 .context(format!("Failed to read symlink: {}", link_path.display()))?;
-            if current_target == skill_path {
-                // Symlink already correct, nothing to do
-                return Ok(());
+            if let Ok(resolved_target) = resolve_symlink_destination(&link_path, &current_target) {
+                if resolved_target == canonical_skill_path {
+                    // Symlink already correct, nothing to do
+                    return Ok(());
+                }
             }
         }
 
@@ -60,7 +70,9 @@ pub fn link_skill(skill_name: &str, skill_path: &Path, target_dir: &Path) -> Res
     }
 
     // Create the symlink
-    create_symlink(skill_path, &link_path)?;
+    let link_target =
+        relative_path(&canonical_target_dir, &canonical_skill_path).unwrap_or(canonical_skill_path);
+    create_symlink(&link_target, &link_path)?;
 
     Ok(())
 }
@@ -149,6 +161,63 @@ fn remove_symlink(path: &Path) -> Result<()> {
     Ok(())
 }
 
+fn resolve_symlink_destination(link_path: &Path, current_target: &Path) -> Result<PathBuf> {
+    let absolute_target = if current_target.is_absolute() {
+        current_target.to_path_buf()
+    } else {
+        let parent = link_path.parent().context(format!(
+            "Symlink has no parent directory: {}",
+            link_path.display()
+        ))?;
+        parent.join(current_target)
+    };
+    fs::canonicalize(&absolute_target).context(format!(
+        "Failed to resolve symlink destination: {}",
+        link_path.display()
+    ))
+}
+
+fn relative_path(from: &Path, to: &Path) -> Option<PathBuf> {
+    let from_components: Vec<Component<'_>> = from.components().collect();
+    let to_components: Vec<Component<'_>> = to.components().collect();
+
+    if from_components.is_empty() || to_components.is_empty() {
+        return None;
+    }
+
+    // If roots/prefixes differ, no safe relative path exists.
+    if from_components[0] != to_components[0] {
+        return None;
+    }
+
+    let mut common_len = 0;
+    while common_len < from_components.len()
+        && common_len < to_components.len()
+        && from_components[common_len] == to_components[common_len]
+    {
+        common_len += 1;
+    }
+
+    let mut result = PathBuf::new();
+
+    for component in &from_components[common_len..] {
+        if matches!(component, Component::Normal(_)) {
+            result.push("..");
+        }
+    }
+
+    for component in &to_components[common_len..] {
+        match component {
+            Component::Normal(part) => result.push(part),
+            Component::ParentDir => result.push(".."),
+            Component::CurDir => {}
+            Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+
+    Some(result)
+}
+
 #[cfg(unix)]
 fn create_symlink(source: &Path, link_path: &Path) -> Result<()> {
     std::os::unix::fs::symlink(source, link_path)
@@ -191,7 +260,9 @@ mod tests {
         assert!(link_path.exists());
         assert!(link_path.is_symlink());
         let link_target = fs::read_link(&link_path).unwrap();
-        assert_eq!(link_target, skill_dir);
+        assert!(link_target.is_relative());
+        let resolved = fs::canonicalize(target_dir.join(link_target)).unwrap();
+        assert_eq!(resolved, fs::canonicalize(skill_dir).unwrap());
     }
 
     #[test]
@@ -251,7 +322,30 @@ mod tests {
         // Then - symlink points to new location
         let link_path = target_dir.join("my-skill");
         let link_target = fs::read_link(&link_path).unwrap();
-        assert_eq!(link_target, skill_dir_2);
+        let resolved = fs::canonicalize(target_dir.join(link_target)).unwrap();
+        assert_eq!(resolved, fs::canonicalize(skill_dir_2).unwrap());
+    }
+
+    #[test]
+    fn should_keep_existing_absolute_symlink_when_destination_matches() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let skill_dir = temp.path().join("skill-source");
+        let target_dir = temp.path().join("target");
+        let link_path = target_dir.join("my-skill");
+
+        fs::create_dir(&skill_dir).unwrap();
+        fs::create_dir(&target_dir).unwrap();
+        create_marker(&target_dir).unwrap();
+        create_symlink(&skill_dir, &link_path).unwrap();
+        let original_target = fs::read_link(&link_path).unwrap();
+        assert!(original_target.is_absolute());
+
+        // When
+        link_skill("my-skill", &skill_dir, &target_dir).unwrap();
+
+        // Then
+        assert_eq!(fs::read_link(&link_path).unwrap(), original_target);
     }
 
     #[test]
