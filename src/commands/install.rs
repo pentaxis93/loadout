@@ -1,6 +1,6 @@
 //! Install command implementation
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -17,15 +17,8 @@ struct TargetPlan {
 }
 
 #[derive(Debug)]
-struct ProjectPlan {
-    project_path: PathBuf,
-    targets: Vec<TargetPlan>,
-}
-
-#[derive(Debug)]
 struct InstallPlan {
-    global_targets: Vec<TargetPlan>,
-    project_targets: Vec<ProjectPlan>,
+    targets: Vec<TargetPlan>,
 }
 
 /// Install skills by creating symlinks in target directories
@@ -48,11 +41,8 @@ pub fn install(config: &Config, dry_run: bool) -> Result<()> {
         println!();
     }
 
-    // Reconcile + link global skills
-    install_global_skills(&install_plan, &skill_map, dry_run)?;
-
-    // Reconcile + link project skills
-    install_project_skills(&install_plan, &skill_map, dry_run)?;
+    // Reconcile + link targets
+    install_targets(&install_plan, &skill_map, dry_run)?;
 
     if !dry_run {
         println!();
@@ -68,7 +58,7 @@ fn build_install_plan(config: &Config) -> Result<InstallPlan> {
     validate_global_aliases(config)?;
 
     let selected_global: HashSet<_> = config.global.targets.iter().cloned().collect();
-    let mut global_targets = Vec::new();
+    let mut consolidated: BTreeMap<PathBuf, BTreeSet<String>> = BTreeMap::new();
 
     for alias in &aliases {
         let alias_paths = config
@@ -76,22 +66,25 @@ fn build_install_plan(config: &Config) -> Result<InstallPlan> {
             .get(alias)
             .context(format!("Unknown target alias '{alias}' in global.targets"))?;
 
-        let skills = if selected_global.contains(alias) {
+        if selected_global.contains(alias) {
             unique_skills(config.global.skills.iter().cloned())
         } else {
             Vec::new()
-        };
-
-        global_targets.push(TargetPlan {
-            target: alias_paths.global.clone(),
-            skills,
+        }
+        .into_iter()
+        .for_each(|skill_name| {
+            consolidated
+                .entry(alias_paths.global.clone())
+                .or_default()
+                .insert(skill_name);
         });
+
+        consolidated.entry(alias_paths.global.clone()).or_default();
     }
 
     let mut project_entries: Vec<_> = config.projects.iter().collect();
     project_entries.sort_by(|(left, _), (right, _)| left.cmp(right));
 
-    let mut project_targets = Vec::new();
     for (project_path, project_config) in project_entries {
         validate_project_aliases(config, project_path, project_config)?;
 
@@ -103,7 +96,6 @@ fn build_install_plan(config: &Config) -> Result<InstallPlan> {
             .cloned()
             .collect();
 
-        let mut targets = Vec::new();
         for alias in &aliases {
             let alias_paths = config.target_aliases.get(alias).context(format!(
                 "Unknown target alias '{alias}' in projects.\"{}\".targets",
@@ -116,6 +108,8 @@ fn build_install_plan(config: &Config) -> Result<InstallPlan> {
                 alias_paths.project.clone()
             };
 
+            consolidated.entry(target.clone()).or_default();
+
             let mut skills = Vec::new();
             if selected_aliases.contains(alias) {
                 if project_config.inherit {
@@ -124,22 +118,24 @@ fn build_install_plan(config: &Config) -> Result<InstallPlan> {
                 skills.extend(project_config.skills.iter().cloned());
             }
 
-            targets.push(TargetPlan {
-                target,
-                skills: unique_skills(skills),
-            });
+            for skill_name in unique_skills(skills) {
+                consolidated
+                    .entry(target.clone())
+                    .or_default()
+                    .insert(skill_name);
+            }
         }
-
-        project_targets.push(ProjectPlan {
-            project_path: project_path.clone(),
-            targets,
-        });
     }
 
-    Ok(InstallPlan {
-        global_targets,
-        project_targets,
-    })
+    let targets = consolidated
+        .into_iter()
+        .map(|(target, skills)| TargetPlan {
+            target,
+            skills: skills.into_iter().collect(),
+        })
+        .collect();
+
+    Ok(InstallPlan { targets })
 }
 
 fn validate_global_aliases(config: &Config) -> Result<()> {
@@ -179,47 +175,19 @@ fn unique_skills(skills: impl IntoIterator<Item = String>) -> Vec<String> {
     deduped.into_iter().collect()
 }
 
-/// Reconcile + install global skills to global target directories.
-fn install_global_skills(
+/// Reconcile + install skills to all unique target directories.
+fn install_targets(
     plan: &InstallPlan,
     skill_map: &HashMap<String, skill::Skill>,
     dry_run: bool,
 ) -> Result<()> {
-    println!("{}", "--- Global scope ---".cyan().bold());
-
-    for target_plan in &plan.global_targets {
+    println!("{}", "--- Reconcile targets ---".cyan().bold());
+    for target_plan in &plan.targets {
         println!("Target: {}", target_plan.target.display());
         prune_stale_links(&target_plan.target, &target_plan.skills, dry_run)?;
 
         for skill_name in &target_plan.skills {
             install_skill(skill_name, skill_map, &target_plan.target, dry_run)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Reconcile + install project-specific skills to project-local target directories.
-fn install_project_skills(
-    plan: &InstallPlan,
-    skill_map: &HashMap<String, skill::Skill>,
-    dry_run: bool,
-) -> Result<()> {
-    for project_plan in &plan.project_targets {
-        println!();
-        println!(
-            "{} {}",
-            "--- Project:".cyan().bold(),
-            project_plan.project_path.display()
-        );
-
-        for target_plan in &project_plan.targets {
-            println!("Target: {}", target_plan.target.display());
-            prune_stale_links(&target_plan.target, &target_plan.skills, dry_run)?;
-
-            for skill_name in &target_plan.skills {
-                install_skill(skill_name, skill_map, &target_plan.target, dry_run)?;
-            }
         }
     }
 
@@ -673,5 +641,78 @@ inherit = false
 
         // Then
         assert!(global_target.join("test-skill").exists());
+    }
+
+    #[test]
+    fn should_not_prune_selected_skills_when_aliases_share_global_target_path() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        create_test_skills(&temp);
+        let mut config = create_test_config(&temp);
+        let shared_global = temp.path().join("shared-global");
+        config.target_aliases.insert(
+            "zzz_runner".to_string(),
+            TargetAliasPaths {
+                global: shared_global.clone(),
+                project: std::path::PathBuf::from(".zzz/skills"),
+            },
+        );
+        config.target_aliases.insert(
+            "aaa_runner".to_string(),
+            TargetAliasPaths {
+                global: shared_global.clone(),
+                project: std::path::PathBuf::from(".aaa/skills"),
+            },
+        );
+        config.global.targets = vec!["aaa_runner".to_string()];
+        config.projects.clear();
+
+        // When
+        install(&config, false).unwrap();
+
+        // Then
+        assert!(shared_global.join("test-skill").exists());
+    }
+
+    #[test]
+    fn should_union_skills_when_projects_share_absolute_project_target_path() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        create_test_skills(&temp);
+        let mut config = create_test_config(&temp);
+        let shared_project_target = temp.path().join("shared-project-target");
+        config.target_aliases.insert(
+            "shared".to_string(),
+            TargetAliasPaths {
+                global: temp.path().join("shared-global"),
+                project: shared_project_target.clone(),
+            },
+        );
+        config.global.targets = vec![];
+        config.global.skills.clear();
+        config.projects.clear();
+        config.projects.insert(
+            temp.path().join("project-a"),
+            Project {
+                skills: vec!["test-skill".to_string()],
+                inherit: false,
+                targets: Some(vec!["shared".to_string()]),
+            },
+        );
+        config.projects.insert(
+            temp.path().join("project-b"),
+            Project {
+                skills: vec!["another-skill".to_string()],
+                inherit: false,
+                targets: Some(vec!["shared".to_string()]),
+            },
+        );
+
+        // When
+        install(&config, false).unwrap();
+
+        // Then
+        assert!(shared_project_target.join("test-skill").exists());
+        assert!(shared_project_target.join("another-skill").exists());
     }
 }
