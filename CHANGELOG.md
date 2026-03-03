@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- `loadout install` now reconciles managed targets by pruning stale managed symlinks before linking
+  currently enabled skills
+- Reconciliation applies across configured aliases for both global and project scopes, including
+  deselected alias targets
+
 ## [0.4.0] — 2026-03-03
 
 ### Added

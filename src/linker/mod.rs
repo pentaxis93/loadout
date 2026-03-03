@@ -122,6 +122,19 @@ pub fn clean_target(target_dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(removed)
 }
 
+/// List managed symlinks in a target directory that would be pruned.
+pub fn preview_prune_target(
+    target_dir: &Path,
+    keep_skill_names: &[String],
+) -> Result<Vec<PathBuf>> {
+    prune_target_impl(target_dir, keep_skill_names, true)
+}
+
+/// Remove managed symlinks from a target directory except the provided skill names.
+pub fn prune_target_except(target_dir: &Path, keep_skill_names: &[String]) -> Result<Vec<PathBuf>> {
+    prune_target_impl(target_dir, keep_skill_names, false)
+}
+
 /// Create a marker file in the target directory
 fn create_marker(target_dir: &Path) -> Result<()> {
     let marker_path = target_dir.join(MARKER_FILE_NAME);
@@ -159,6 +172,58 @@ pub fn is_managed(target_dir: &Path) -> bool {
 fn remove_symlink(path: &Path) -> Result<()> {
     fs::remove_file(path).context(format!("Failed to remove symlink: {}", path.display()))?;
     Ok(())
+}
+
+fn prune_target_impl(
+    target_dir: &Path,
+    keep_skill_names: &[String],
+    dry_run: bool,
+) -> Result<Vec<PathBuf>> {
+    if !is_managed(target_dir) {
+        return Ok(Vec::new());
+    }
+
+    let mut removed = Vec::new();
+
+    if target_dir.exists() && target_dir.is_dir() {
+        for entry in fs::read_dir(target_dir).context(format!(
+            "Failed to read directory: {}",
+            target_dir.display()
+        ))? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.file_name().and_then(|n| n.to_str()) == Some(MARKER_FILE_NAME) {
+                continue;
+            }
+
+            if !path.is_symlink() {
+                continue;
+            }
+
+            let skill_name = path.file_name().and_then(|n| n.to_str());
+            if skill_name.is_some_and(|name| keep_skill_names.iter().any(|keep| keep == name)) {
+                continue;
+            }
+
+            if !dry_run {
+                remove_symlink(&path)?;
+            }
+            removed.push(path);
+        }
+    }
+
+    if !dry_run && has_only_marker_or_is_empty(target_dir)? {
+        remove_marker(target_dir)?;
+        if is_directory_empty(target_dir)? {
+            fs::remove_dir(target_dir).context(format!(
+                "Failed to remove empty directory: {}",
+                target_dir.display()
+            ))?;
+        }
+    }
+
+    Ok(removed)
 }
 
 fn resolve_symlink_destination(link_path: &Path, current_target: &Path) -> Result<PathBuf> {
@@ -236,6 +301,21 @@ fn create_symlink(source: &Path, link_path: &Path) -> Result<()> {
 fn is_directory_empty(dir: &Path) -> Result<bool> {
     let entries: Vec<_> = fs::read_dir(dir)?.collect();
     Ok(entries.is_empty())
+}
+
+fn has_only_marker_or_is_empty(dir: &Path) -> Result<bool> {
+    if !dir.exists() || !dir.is_dir() {
+        return Ok(false);
+    }
+
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_name().to_str() != Some(MARKER_FILE_NAME) {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -438,6 +518,64 @@ mod tests {
 
         // When - after marker
         create_marker(&target_dir).unwrap();
+        assert!(is_managed(&target_dir));
+    }
+
+    #[test]
+    fn should_prune_stale_symlinks_and_keep_requested_skills() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let source_a = temp.path().join("source-a");
+        let source_b = temp.path().join("source-b");
+        let target_dir = temp.path().join("target");
+        fs::create_dir_all(&source_a).unwrap();
+        fs::create_dir_all(&source_b).unwrap();
+        link_skill("keep-skill", &source_a, &target_dir).unwrap();
+        link_skill("stale-skill", &source_b, &target_dir).unwrap();
+        let keep = vec!["keep-skill".to_string()];
+
+        // When
+        let removed = prune_target_except(&target_dir, &keep).unwrap();
+
+        // Then
+        assert_eq!(removed.len(), 1);
+        assert!(target_dir.join("keep-skill").exists());
+        assert!(!target_dir.join("stale-skill").exists());
+    }
+
+    #[test]
+    fn should_remove_marker_and_directory_when_prune_empties_target() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let target_dir = temp.path().join("target");
+        fs::create_dir_all(&source).unwrap();
+        link_skill("stale-skill", &source, &target_dir).unwrap();
+        let keep = Vec::new();
+
+        // When
+        prune_target_except(&target_dir, &keep).unwrap();
+
+        // Then
+        assert!(!target_dir.exists());
+    }
+
+    #[test]
+    fn should_preview_prune_without_removing_symlinks() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        let source = temp.path().join("source");
+        let target_dir = temp.path().join("target");
+        fs::create_dir_all(&source).unwrap();
+        link_skill("stale-skill", &source, &target_dir).unwrap();
+        let keep = Vec::new();
+
+        // When
+        let removed = preview_prune_target(&target_dir, &keep).unwrap();
+
+        // Then
+        assert_eq!(removed.len(), 1);
+        assert!(target_dir.join("stale-skill").exists());
         assert!(is_managed(&target_dir));
     }
 }
