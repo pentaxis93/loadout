@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-03-03
+
 ### Changed
-- `loadout install` now reconciles managed targets by pruning stale managed symlinks before linking
-  currently enabled skills
-- Reconciliation applies across configured aliases for both global and project scopes, including
-  deselected alias targets
+- `loadout install` now reconciles managed links by pruning stale symlinks before linking
+  configured skills
+- Reconciliation consolidates desired skills by resolved target path to avoid shared-path prune
+  conflicts across aliases and projects
+- `loadout install` now preflights skill resolution before pruning/linking so missing-skill
+  failures are non-destructive
+
+### Added
+- Regression tests covering shared target-path reconciliation and non-destructive failure handling
+  when configured skills are missing
 
 ## [0.4.0] — 2026-03-03
 
@@ -110,7 +118,8 @@ Phase 1: Bash Scripts Implementation.
 - `DESIGN.md` documenting config format, skill structure, and
   resolution rules
 
-[Unreleased]: https://github.com/pentaxis93/loadout/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/pentaxis93/loadout/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/pentaxis93/loadout/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/pentaxis93/loadout/compare/v0.3.6...v0.4.0
 [0.3.6]: https://github.com/pentaxis93/loadout/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/pentaxis93/loadout/compare/v0.1.0...v0.3.5
