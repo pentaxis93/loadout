@@ -181,17 +181,43 @@ fn install_targets(
     skill_map: &HashMap<String, skill::Skill>,
     dry_run: bool,
 ) -> Result<()> {
-    println!("{}", "--- Reconcile targets ---".cyan().bold());
-    for target_plan in &plan.targets {
-        println!("Target: {}", target_plan.target.display());
-        prune_stale_links(&target_plan.target, &target_plan.skills, dry_run)?;
+    let resolved = resolve_planned_skills(plan, skill_map)?;
 
-        for skill_name in &target_plan.skills {
-            install_skill(skill_name, skill_map, &target_plan.target, dry_run)?;
+    println!("{}", "--- Reconcile targets ---".cyan().bold());
+    for (target, skills) in resolved {
+        let desired_skill_names: Vec<String> =
+            skills.iter().map(|(name, _)| name.clone()).collect();
+
+        println!("Target: {}", target.display());
+        prune_stale_links(&target, &desired_skill_names, dry_run)?;
+
+        for (skill_name, skill_path) in skills {
+            install_resolved_skill(&skill_name, &skill_path, &target, dry_run)?;
         }
     }
 
     Ok(())
+}
+
+fn resolve_planned_skills(
+    plan: &InstallPlan,
+    skill_map: &HashMap<String, skill::Skill>,
+) -> Result<Vec<(PathBuf, Vec<(String, PathBuf)>)>> {
+    let mut resolved = Vec::new();
+
+    for target_plan in &plan.targets {
+        let mut target_skills = Vec::new();
+        for skill_name in &target_plan.skills {
+            let skill = skill_map.get(skill_name).context(format!(
+                "Skill '{}' not found in source directories",
+                skill_name
+            ))?;
+            target_skills.push((skill_name.clone(), skill.path.clone()));
+        }
+        resolved.push((target_plan.target.clone(), target_skills));
+    }
+
+    Ok(resolved)
 }
 
 fn prune_stale_links(target: &Path, desired_skills: &[String], dry_run: bool) -> Result<()> {
@@ -217,26 +243,21 @@ fn prune_stale_links(target: &Path, desired_skills: &[String], dry_run: bool) ->
 }
 
 /// Install a single skill to a target directory
-fn install_skill(
+fn install_resolved_skill(
     skill_name: &str,
-    skill_map: &HashMap<String, skill::Skill>,
+    skill_path: &Path,
     target: &Path,
     dry_run: bool,
 ) -> Result<()> {
-    let skill = skill_map.get(skill_name).context(format!(
-        "Skill '{}' not found in source directories",
-        skill_name
-    ))?;
-
     if dry_run {
         println!(
             "  {} {} -> {}",
             "[dry-run]".yellow(),
-            skill.path.display(),
+            skill_path.display(),
             target.join(skill_name).display()
         );
     } else {
-        linker::link_skill(skill_name, &skill.path, target).context(format!(
+        linker::link_skill(skill_name, skill_path, target).context(format!(
             "Failed to link skill '{}' to {}",
             skill_name,
             target.display()
@@ -494,6 +515,50 @@ mod tests {
         let err = result.unwrap_err();
         assert!(err.to_string().contains("not found"));
         assert!(err.to_string().contains("nonexistent"));
+    }
+
+    #[test]
+    fn should_not_prune_existing_links_when_global_skill_not_found() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        create_test_skills(&temp);
+        let mut config = create_test_config(&temp);
+        install(&config, false).unwrap();
+        let global_target = temp.path().join("global");
+        assert!(global_target.join("test-skill").exists());
+        config.global.skills.push("nonexistent".to_string());
+
+        // When
+        let result = install(&config, false);
+
+        // Then
+        assert!(result.is_err());
+        assert!(global_target.join("test-skill").exists());
+    }
+
+    #[test]
+    fn should_not_prune_existing_links_when_project_skill_not_found() {
+        // Given
+        let temp = TempDir::new().unwrap();
+        create_test_skills(&temp);
+        let mut config = create_test_config(&temp);
+        install(&config, false).unwrap();
+        let project_target = temp.path().join("project/.test-runner/skills");
+        assert!(project_target.join("another-skill").exists());
+        let project_path = temp.path().join("project");
+        config
+            .projects
+            .get_mut(&project_path)
+            .unwrap()
+            .skills
+            .push("nonexistent".to_string());
+
+        // When
+        let result = install(&config, false);
+
+        // Then
+        assert!(result.is_err());
+        assert!(project_target.join("another-skill").exists());
     }
 
     #[test]
