@@ -1,5 +1,13 @@
 # loadout
 
+> **Status: No longer actively maintained.**
+> [`sk`](https://www.npmjs.com/package/@skills-supply/sk) meets the same
+> need and does it better — it installs skills directly from git repos
+> instead of symlinking from local directories. The analysis features
+> (graph, check, pipelines, tags) were experimental and never found
+> verified use cases. The code remains available as reference. See also
+> [the article that motivated this project](https://aiandi.dev/blog/ai-instructions-are-a-supply-chain-problem/).
+
 Skill management for AI development tools.
 
 Loadout is the tool that links your skills into the discovery paths

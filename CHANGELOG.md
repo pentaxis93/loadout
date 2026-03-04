@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Deprecated
+- Project is no longer actively maintained
+- Recommend [`sk`](https://www.npmjs.com/package/@skills-supply/sk) for
+  skill installation going forward
+- Analysis features (`graph`, `check`, `list --pipelines`, `list --tags`)
+  remain functional but unsupported
+
 ## [0.4.1] — 2026-03-03
 
 ### Changed

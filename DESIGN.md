@@ -1,5 +1,8 @@
 # Loadout — Design
 
+> **This project is no longer actively maintained.** See the
+> [README](README.md) for details and recommended alternatives.
+
 Architecture and rationale for the skill management system.
 For usage instructions, see [README.md](README.md).
 
